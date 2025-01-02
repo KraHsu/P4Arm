@@ -10,7 +10,6 @@
 #include <spdlog/spdlog.h>
 #include <units.h>
 // ---- standard ----
-#include <functional>
 #include <mutex>
 #include <variant>
 

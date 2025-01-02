@@ -1,10 +1,9 @@
 // ---- Hsu ----
-#include "RMArm/rm_define.h"
 #include <Hsu/arm.h>
 #include <Hsu/matrix_ops.h>
+#include <RMArm/rm_define.h>
 // ---- stdandard ----
 #include <chrono>
-#include <exception>
 #include <memory>
 #include <stdexcept>
 #include <thread>

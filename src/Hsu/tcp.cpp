@@ -1,13 +1,9 @@
 #include <Hsu/tcp.h>
 #include <fmt/base.h>
-#include <mutex>
-#include <sstream>
 #include <thread>
 #include <unordered_map>
-#include <vector>
 
 using json = nlohmann::json;
-using boost::asio::ip::tcp;
 
 #define DEBUG(...) Hsu::detail::tcp_logger()->debug(__VA_ARGS__)
 #define INFO(...) Hsu::detail::tcp_logger()->info(__VA_ARGS__)

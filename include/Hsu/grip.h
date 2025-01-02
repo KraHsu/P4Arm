@@ -3,7 +3,6 @@
 #include <RMArm/rm_define.h>
 #include <RMArm/rm_service.h>
 #include <nlohmann/json.hpp>
-#include <stdio.h>
 #include <unistd.h>
 
 typedef enum { Grip_Running = 0, Grip_Arrived = 1, Grip_Caught = 2, Grip_Lost = 3 } Grip_StateEnum;
