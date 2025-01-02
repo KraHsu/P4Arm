@@ -7,10 +7,10 @@
 
 #if _WIN32
 #if defined(RM_INTERFACE_LIBRARY)
-#  define RM_INTERFACE_EXPORT __declspec(dllexport)
+#define RM_INTERFACE_EXPORT __declspec(dllexport)
 #else
-#  define RM_INTERFACE_EXPORT __declspec(dllexport)
+#define RM_INTERFACE_EXPORT __declspec(dllexport)
 #endif
 #endif
 
-#endif // RM_INTERFACE_GLOBAL_H
+#endif  // RM_INTERFACE_GLOBAL_H

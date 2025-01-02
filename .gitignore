@@ -12,5 +12,6 @@ _deps
 CMakeUserPresets.json
 
 .vscode
+.cache
 build/*
 log/*

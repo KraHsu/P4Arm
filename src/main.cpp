@@ -8,11 +8,9 @@
 #include <RMArm/rm_define.h>
 #include <RMArm/rm_service.h>
 // ---- standard ----
-#include <atomic>
 #include <chrono>
 #include <exception>
 #include <functional>
-#include <future>
 #include <iostream>
 #include <memory>
 #include <string>
@@ -215,7 +213,7 @@ int main() {
 
     // right_hand =
     // std::make_shared<Hsu::Hand>(right_arm->connect_modbus_actor(1, 115200,
-    // 10));
+    // 10)); -->
     right_hand = nullptr;
     // left_hand = std::make_shared<Hsu::Hand>(left_arm->connect_modbus_actor(1,
     // 115200, 10));
