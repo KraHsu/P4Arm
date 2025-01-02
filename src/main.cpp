@@ -20,6 +20,7 @@
 #include <sys/time.h>
 #include <termios.h>
 #include <unistd.h>
+
 // ---- thrid ----
 #include <fmt/base.h>
 #include <fmt/core.h>
@@ -212,9 +213,12 @@ int main() {
     left_arm = std::make_shared<Hsu::Arm>("192.168.1.18", 8080);
     right_arm = std::make_shared<Hsu::Arm>("192.168.2.18", 8080);
 
-    // right_hand = std::make_shared<Hsu::Hand>(right_arm->connect_modbus_actor(1, 115200, 10));
+    // right_hand =
+    // std::make_shared<Hsu::Hand>(right_arm->connect_modbus_actor(1, 115200,
+    // 10));
     right_hand = nullptr;
-    // left_hand = std::make_shared<Hsu::Hand>(left_arm->connect_modbus_actor(1, 115200, 10));
+    // left_hand = std::make_shared<Hsu::Hand>(left_arm->connect_modbus_actor(1,
+    // 115200, 10));
     left_hand = std::make_shared<Hsu::Hand>(test.to_actor());
 
     server = std::make_shared<Hsu::TCPConnection>("127.0.0.1", 5000);
