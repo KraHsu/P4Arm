@@ -41,7 +41,7 @@ bool ModbusTCP::connect() {
 void ModbusTCP::disconnect() {
   if (socket_.is_open()) {
     socket_.close();
-    ERROR("已断开与 Modbus 服务器的连接\n");
+    WARN("已断开与 Modbus 服务器的连接\n");
   }
 }
 
@@ -188,12 +188,12 @@ std::vector<uint8_t> ModbusTCP::sendRequest(const std::vector<uint8_t>& request,
 }  // namespace Hsu
 namespace Hsu {
 std::weak_ptr<ModbusActor_TCP> ModbusTCP::produce_modbus_actor() {
-  if (modbus_actor_) {
-    ERROR("每个TCP只能生产一个Modbus接口");
-  }
+  // if (modbus_actor_.get()) {
+  //   ERROR("每个TCP只能生产一个Modbus接口");
+  // }
   modbus_actor_ = std::shared_ptr<ModbusActor_TCP>(new ModbusActor_TCP(shared_from_this()));
 
-  return modbus_actor_;
+  return std::weak_ptr(modbus_actor_);
 }
 
 ModbusActor_TCP::ModbusActor_TCP(std::weak_ptr<ModbusTCP> tcp) : tcp_{tcp} {}
