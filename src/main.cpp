@@ -49,20 +49,19 @@ using TT = Hsu::Hand::TactileType;
 #define sleep_s(s) std::this_thread::sleep_for(std::chrono::seconds(s));
 #define sleep_ms(ms) std::this_thread::sleep_for(std::chrono::milliseconds(ms));
 
-bool STOP = false;
+// ---- GLOBAL ----
+bool MAIN_IS_RUNNING = true;
+
+#define WHILE_RUNNING while (MAIN_IS_RUNNING)
 
 void set_up_main_logger();
 
 std::mutex cout_lock{};
 
-float r2d(float rad) { return rad * (180.0f / M_PI); }
-
-float d2r(float deg) { return deg * (M_PI / 180.0f); }
-
 void collision_detection_thread(std::shared_ptr<Hsu::Arm> arm, rm_position_t pos,
                                 std::function<bool(rm_position_t, rm_euler_t)> detected) {
   try {
-    while (!STOP) {
+    WHILE_RUNNING {
       cout_lock.lock();
       auto pose_now = arm->get_state().pose;
       if (detected(pose_now.position, pose_now.euler)) {
@@ -81,8 +80,6 @@ void collision_detection_thread(std::shared_ptr<Hsu::Arm> arm, rm_position_t pos
     ERROR(e.what());
   }
 }
-
-void Hsu::Hand::test() {}
 
 template <typename T, int Rows, int Cols>
 json eigen_to_json_array(const Eigen::Matrix<T, Rows, Cols>& matrix) {
@@ -215,9 +212,8 @@ int main() {
     // std::make_shared<Hsu::Hand>(right_arm->connect_modbus_actor(1, 115200,
     // 10)); -->
     right_hand = nullptr;
-    // left_hand = std::make_shared<Hsu::Hand>(left_arm->connect_modbus_actor(1,
-    // 115200, 10));
-    left_hand = std::make_shared<Hsu::Hand>(test.to_actor());
+    left_hand = std::make_shared<Hsu::Hand>(left_arm->produce_modbus_actor(1, 115200, 1, 10));
+    left_hand = std::make_shared<Hsu::Hand>(test.produce_modbus_actor());
 
     server = std::make_shared<Hsu::TCPConnection>("127.0.0.1", 5000);
 
@@ -250,8 +246,10 @@ int main() {
   right_arm->set_mode(1);
   left_arm->set_mode(1);
 
-  limited_move_jp(left_arm, rm_position_t{0.7, 0.40, -0.15}, rm_euler_t{d2r(-90), d2r(25), d2r(-90)});
-  limited_move_jp(right_arm, rm_position_t{0.7, -0.40, -0.15}, rm_euler_t{d2r(90), d2r(25), d2r(90)});
+  limited_move_jp(left_arm, rm_position_t{0.7, 0.40, -0.15},
+                  rm_euler_t{-90_deg / 1_rad, 25_deg / 1_rad, -90_deg / 1_rad});
+  limited_move_jp(right_arm, rm_position_t{0.7, -0.40, -0.15},
+                  rm_euler_t{90_deg / 1_rad, 25_deg / 1_rad, 90_deg / 1_rad});
 
   Hsu::Hand::Angles open_angles(176_deg, 176_deg, 176_deg, 176_deg, 70_deg, 120_deg);
   Hsu::Hand::Angles close_angles(20_deg, 20_deg, 20_deg, 20_deg, 50_deg, 90_deg);
@@ -305,7 +303,7 @@ int main() {
 
   end.join();
 
-  STOP = true;
+  MAIN_IS_RUNNING = false;
 
   server->stop_server();
 
