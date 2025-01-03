@@ -4,12 +4,13 @@
 #include <bits/stdint-uintn.h>
 #include <boost/asio.hpp>
 #include <cstddef>
+#include <memory>
 #include <vector>
 
 namespace Hsu {
 class ModbusActor_TCP;
 
-class ModbusTCP {
+class ModbusTCP : public std::enable_shared_from_this<ModbusTCP> {
  private:
   std::shared_ptr<ModbusActor_TCP> ma_{nullptr};
 
@@ -35,8 +36,6 @@ class ModbusTCP {
 
   void write_holding_registers(uint16_t address, std::vector<uint8_t> const& data);
 
-  std::shared_ptr<ModbusActor_TCP> to_actor();
-
  private:
   std::string host_;
   uint16_t port_;
@@ -45,27 +44,33 @@ class ModbusTCP {
 
   // 使用类成员缓冲区，避免重复分配内存
   std::vector<uint8_t> buffer_;
+
+ private:
+  std::shared_ptr<ModbusActor_TCP> modbus_actor_;
+
+ public:
+  std::weak_ptr<ModbusActor_TCP> produce_modbus_actor();
 };
 
 class ModbusActor_TCP : public ModbusActorBase {
  private:
-  ModbusTCP* handle_{nullptr};
+  std::weak_ptr<ModbusTCP> tcp_;
 
-  ModbusActor_TCP(ModbusTCP* handle);
+  ModbusActor_TCP(std::weak_ptr<ModbusTCP> tcp);
 
   friend class ModbusTCP;
 
  public:
   ModbusActor_TCP(ModbusActor_TCP const&) = delete;
 
-  int read_holding_registers(int address, int device) override;
+  int read_holding_registers(int const& address) override;
 
-  std::vector<int> read_multiple_holding_registers(int address, int device, int len) override;
+  std::vector<int> read_multiple_holding_registers(int const& address, int const& len) override;
 
-  int read_input_registers(int address, int device) override;
+  int read_input_registers(int const& address) override;
 
-  void write_single_register(int address, int device, int data) override;
+  void write_single_register(int const& address, int const& data) override;
 
-  void write_multiple_registers(int address, int device, std::vector<int> const& data) override;
+  void write_multiple_registers(int const& address, std::vector<int> const& data) override;
 };
 }  // namespace Hsu

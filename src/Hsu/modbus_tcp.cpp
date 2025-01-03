@@ -1,3 +1,4 @@
+#include <Hsu/hsu_module_log.h>
 #include <Hsu/modbus_tcp.h>
 // ---- third ----
 #include <bits/stdint-uintn.h>
@@ -6,30 +7,14 @@
 // ---- standard ----
 #include <chrono>
 #include <cstddef>
-#include <filesystem>
+#include <memory>
 #include <stdexcept>
 #include <string>
 #include <vector>
 
 using boost::asio::ip::tcp;
 
-#define DEBUG(...) Hsu::detail::mtcp_logger()->debug(__VA_ARGS__)
-#define INFO(...) Hsu::detail::mtcp_logger()->info(__VA_ARGS__)
-#define WARN(...) Hsu::detail::mtcp_logger()->warn(__VA_ARGS__)
-#define ERROR(...) Hsu::detail::mtcp_logger()->error(__VA_ARGS__)
-
-namespace Hsu::detail {
-std::shared_ptr<spdlog::logger> mtcp_logger() {
-  std::filesystem::create_directories("./log");
-  static std::shared_ptr<spdlog::logger> LOGGER = spdlog::get("Hsu mTCP Logger");
-  if (!LOGGER) {
-    LOGGER = spdlog::basic_logger_mt("Hsu mTCP Logger", "./log/Hsu_mtcp.log");
-    LOGGER->set_pattern("[%Y-%m-%d %H:%M:%S.%e] [thread %t] [%^%l%$] %v");
-    INFO("==== New ====");
-  }
-  return LOGGER;
-}
-}  // namespace Hsu::detail
+GENERATE_LOGGER(modbus_tcp)
 
 namespace Hsu {
 ModbusTCP::ModbusTCP(const std::string& host, uint16_t port)
@@ -201,62 +186,74 @@ std::vector<uint8_t> ModbusTCP::sendRequest(const std::vector<uint8_t>& request,
 }
 
 }  // namespace Hsu
-
 namespace Hsu {
-std::shared_ptr<ModbusActor_TCP> ModbusTCP::to_actor() {
-  if (!ma_) {
-    ma_ = std::shared_ptr<ModbusActor_TCP>(new ModbusActor_TCP(this));
-
-    return ma_;
+std::weak_ptr<ModbusActor_TCP> ModbusTCP::produce_modbus_actor() {
+  if (modbus_actor_) {
+    ERROR("每个TCP只能生产一个Modbus接口");
   }
-  return ma_;
+  modbus_actor_ = std::shared_ptr<ModbusActor_TCP>(new ModbusActor_TCP(shared_from_this()));
+
+  return modbus_actor_;
 }
 
-ModbusActor_TCP::ModbusActor_TCP(ModbusTCP* handle) : handle_{handle} {}
+ModbusActor_TCP::ModbusActor_TCP(std::weak_ptr<ModbusTCP> tcp) : tcp_{tcp} {}
 
-int ModbusActor_TCP::read_holding_registers(int address, int device) {
+int ModbusActor_TCP::read_holding_registers(int const& address) {
   throw std::runtime_error("未实现");
   return 0;
 }
 
-std::vector<int> ModbusActor_TCP::read_multiple_holding_registers(int address, int device, int len) {
-  auto res = handle_->read_holding_registers(address, len * 2);
+std::vector<int> ModbusActor_TCP::read_multiple_holding_registers(int const& address, int const& len) {
+  if (auto tcp = tcp_.lock()) {
+    auto res = tcp->read_holding_registers(address, len * 2);
+    std::vector<int> result;
+    result.reserve(len);
 
-  std::vector<int> result;
+    for (int i = 0; i < len; i++) {
+      result[i] = res[2 * i] << 8 | res[2 * i + 1];
+    }
 
-  result.reserve(len);
-
-  for (int i = 0; i < len; i++) {
-    result[i] = res[2 * i] << 8 | res[2 * i + 1];
+    return result;
+  } else {
+    ERROR("tcp已销毁，接口失效");
   }
 
-  return result;
+  return {};
 };
 
-int ModbusActor_TCP::read_input_registers(int address, int device) {
+int ModbusActor_TCP::read_input_registers(int const& address) {
   throw std::runtime_error("未实现");
   return 0;
 }
 
-void ModbusActor_TCP::write_single_register(int address, int device, int data) {
-  std::vector<uint8_t> vec;
-  vec.reserve(2);
+void ModbusActor_TCP::write_single_register(int const& address, int const& data) {
+  if (auto tcp = tcp_.lock()) {
+    std::vector<uint8_t> vec;
+    vec.reserve(2);
 
-  vec[0] = data >> 8;
-  vec[1] = data & 0xFF;
+    vec[0] = data >> 8;
+    vec[1] = data & 0xFF;
 
-  handle_->write_holding_registers(address, vec);
+    tcp->write_holding_registers(address, vec);
+
+  } else {
+    ERROR("tcp已销毁，接口失效");
+  }
 }
 
-void ModbusActor_TCP::write_multiple_registers(int address, int device, std::vector<int> const& data) {
-  std::vector<uint8_t> vec;
-  vec.reserve(data.size() * 2);
+void ModbusActor_TCP::write_multiple_registers(int const& address, std::vector<int> const& data) {
+  if (auto tcp = tcp_.lock()) {
+    std::vector<uint8_t> vec;
+    vec.reserve(data.size() * 2);
 
-  for (int value : data) {
-    vec.push_back((value >> 8) & 0xFF);
-    vec.push_back(value & 0xFF);
+    for (int value : data) {
+      vec.push_back((value >> 8) & 0xFF);
+      vec.push_back(value & 0xFF);
+    }
+
+    tcp->write_holding_registers(address, vec);
+  } else {
+    ERROR("tcp已销毁，接口失效");
   }
-
-  handle_->write_holding_registers(address, vec);
 }
 }  // namespace Hsu

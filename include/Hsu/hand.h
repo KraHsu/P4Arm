@@ -1,14 +1,16 @@
 #pragma once
 
-#include <Hsu/arm.h>
 #include <Hsu/matrix_ops.h>
+#include <fmt/core.h>
+#include <exception>
 #include <memory>
 #include <mutex>
+#include <stdexcept>
 #include <units.h>
 
 namespace Hsu::detail {
 template <typename T1, typename T2>
-T2 map_range(T1 value, T1 a, T1 b, T2 x, T2 y) {
+inline T2 map_range(T1 value, T1 a, T1 b, T2 x, T2 y) {
   if (a == b) {
     throw std::invalid_argument("输入范围 [a, b] 中 a = b 是非法的.");
   }
@@ -18,6 +20,23 @@ T2 map_range(T1 value, T1 a, T1 b, T2 x, T2 y) {
   return x + (y - x) * (static_cast<double>(value - a) / static_cast<double>(b - a));
 }
 }  // namespace Hsu::detail
+
+namespace Hsu {
+class ModbusActorBase {
+ public:
+  virtual ~ModbusActorBase() = default;
+
+  virtual int read_holding_registers(int const& address) = 0;
+
+  virtual std::vector<int> read_multiple_holding_registers(int const& address, int const& len) = 0;
+
+  virtual int read_input_registers(int const& address) = 0;
+
+  virtual void write_single_register(int const& address, int const& data) = 0;
+
+  virtual void write_multiple_registers(int const& address, std::vector<int> const& data) = 0;
+};
+}  // namespace Hsu
 
 namespace Hsu {
 class Hand {
@@ -63,25 +82,19 @@ class Hand {
 
  private:
   std::mutex mutex_;
-  std::shared_ptr<ModbusActorBase> ma_;
-
-  Angles angles_;
+  std::weak_ptr<ModbusActorBase> modbus_actor_;
 
  public:
-  Hand(std::shared_ptr<ModbusActorBase> ma);
+  Hand(std::weak_ptr<ModbusActorBase> modbus_actor) noexcept;
 
   ~Hand();
 
  public:
-  bool clear_err();
+  void clear_err();
 
   Angles read_angles();
 
-  bool set_angles(Angles const& angles);
-
-  void test();
-
-  // bool set_forces();
+  void set_angles(Angles const& angles);
 
  public:
   enum class TactileType {
@@ -221,24 +234,27 @@ class Hand {
 
     MatrixType res;
 
+    std::lock_guard<std::mutex> lock(mutex_);
+
+    constexpr int address = TactileMatrix<Type>::address;
+
     try {
-      std::lock_guard<std::mutex> lock(mutex_);
-
-      constexpr int address = TactileMatrix<Type>::address;
-
-      auto vec = ma_->read_multiple_holding_registers(address, 1,
-                                                      MatrixType::RowsAtCompileTime * MatrixType::ColsAtCompileTime);
-
-      res = Eigen::Map<const MatrixType>(vec.data());
-    } catch (const std::exception& e) {
-      read_tactile_(e);
+      if (auto ma = modbus_actor_.lock()) {
+        auto vec =
+            ma->read_multiple_holding_registers(address, MatrixType::RowsAtCompileTime * MatrixType::ColsAtCompileTime);
+        res = Eigen::Map<const MatrixType>(vec.data());
+      } else {
+        throw std::runtime_error("Modbus 接口已经失效");
+      }
+    } catch (std::exception& e) {
+      read_tactile_error(e);
     }
 
     return res;
   }
 
  private:
-  void read_tactile_(const std::exception& e);
+  void read_tactile_error(const std::exception& e) const;
 };
 }  // namespace Hsu
 

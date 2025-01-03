@@ -1,5 +1,5 @@
-#include <Hsu/arm.h>
 #include <Hsu/hand.h>
+#include <Hsu/hsu_module_log.h>
 #include <fmt/format.h>
 #include <fmt/ranges.h>
 #include <cstring>
@@ -9,10 +9,7 @@
 #include <stdexcept>
 #include <units.h>
 
-#define DEBUG(...) Hsu::detail::arm_logger()->debug(__VA_ARGS__)
-#define INFO(...) Hsu::detail::arm_logger()->info(__VA_ARGS__)
-#define WARN(...) Hsu::detail::arm_logger()->warn(__VA_ARGS__)
-#define ERROR(...) Hsu::detail::arm_logger()->error(__VA_ARGS__)
+GENERATE_LOGGER(hand)
 
 using namespace units;
 using namespace units::literals;
@@ -82,18 +79,21 @@ Hsu::Hand::AnglesData::operator Hsu::Hand::Angles() const {
 }  // namespace Hsu
 
 namespace Hsu {
-Hand::Hand(std::shared_ptr<ModbusActorBase> ma) : ma_(ma) {}
+Hand::Hand(std::weak_ptr<ModbusActorBase> modbus_actor) noexcept : modbus_actor_(modbus_actor) {}
+
 Hand::~Hand() {}
 
-bool Hand::clear_err() {
+void Hand::clear_err() {
   try {
     std::lock_guard<std::mutex> lock(mutex_);
-    ma_->write_single_register(1004, 1, 1);
+    if (auto ma = modbus_actor_.lock()) {
+      ma->write_single_register(1004, 1);
+    } else {
+      throw std::runtime_error("接口已失效，清除错误失败！");
+    }
   } catch (std::exception& e) {
     ERROR(e.what());
-    return false;
   }
-  return true;
 }
 
 Hand::Angles Hand::read_angles() {
@@ -103,41 +103,39 @@ Hand::Angles Hand::read_angles() {
   try {
     std::lock_guard<std::mutex> lock(mutex_);
 
-    auto vec = ma_->read_multiple_holding_registers(1546, 1, 6);
+    if (auto ma = modbus_actor_.lock()) {
+      auto vec = ma->read_multiple_holding_registers(1546, 6);
+      memcpy(data.data, vec.data(), sizeof(data.data));
+      res = Angles(data);
+    } else {
+      throw std::runtime_error("接口已失效！");
+    }
 
-    memcpy(data.data, vec.data(), sizeof(data.data));
-
-    res = Angles(data);
   } catch (std::exception& e) {
-    auto msg = "读取手指角度失败";
-    ERROR(msg);
-    throw std::runtime_error(msg);
+    ERROR("读取手指角度失败：{}", e.what());
   }
 
   return res;
 }
 
-bool Hand::set_angles(const Angles& angles) {
-  this->angles_ = angles;
-
+void Hand::set_angles(const Angles& angles) {
   AnglesData data(angles);
 
   try {
     std::lock_guard<std::mutex> lock(mutex_);
 
-    ma_->write_multiple_registers(1486, 1, std::vector<int>(data.data, data.data + 6));
+    if (auto ma = modbus_actor_.lock()) {
+      ma->write_multiple_registers(1486, std::vector<int>(data.data, data.data + 6));
+    } else {
+      throw std::runtime_error("接口已失效！");
+    }
   } catch (std::exception& e) {
-    auto msg = "写入手指角度失败";
-    ERROR(msg);
-    return false;
+    ERROR("写入手指角度失败：{}", e.what());
   }
-
-  return true;
 }
 
-void Hand::read_tactile_(const std::exception& e) {
-  auto msg = "读取触觉信息失败";
-  ERROR(msg);
-  throw std::runtime_error(msg);
+void Hand::read_tactile_error(const std::exception& e) const {
+  ERROR("读取触觉信息失败：{}", e.what());
+  return;
 }
 }  // namespace Hsu

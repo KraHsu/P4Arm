@@ -1,7 +1,7 @@
 #pragma once
 
 // ---- Hsu ----
-#include <Hsu/grip.h>
+#include <Hsu/hand.h>
 // ---- RMArm ----
 #include <RMArm/rm_define.h>
 #include <RMArm/rm_service.h>
@@ -10,6 +10,7 @@
 #include <spdlog/spdlog.h>
 #include <units.h>
 // ---- standard ----
+#include <memory>
 #include <mutex>
 #include <variant>
 
@@ -38,48 +39,36 @@ void throw_modbus_err(std::string msg, int res);
 
 class Arm;
 
-class ModbusActorBase {
- public:
-  virtual int read_holding_registers(int address, int device) = 0;
-
-  virtual std::vector<int> read_multiple_holding_registers(int address, int device, int len) = 0;
-
-  virtual int read_input_registers(int address, int device) = 0;
-
-  virtual void write_single_register(int address, int device, int data) = 0;
-
-  virtual void write_multiple_registers(int address, int device, std::vector<int> const& data) = 0;
-};
-
 class ModbusActor_RTU : public ModbusActorBase {
- private:
-  rm_robot_handle* handle_{nullptr};
-
-  int port_;
-
-  ModbusActor_RTU(rm_robot_handle* handle, int port);
-
   friend class Arm;
+
+ private:
+  std::weak_ptr<Arm> arm_;
+
+  rm_peripheral_read_write_params_t params_;
+
+ private:
+  ModbusActor_RTU(std::weak_ptr<Arm> arm, int port, int device) noexcept;
 
  public:
   ModbusActor_RTU(ModbusActor_RTU const&) = delete;
 
-  int read_holding_registers(int address, int device) override;
+  int read_holding_registers(int const& address) override;
 
-  std::vector<int> read_multiple_holding_registers(int address, int device, int len) override;
+  std::vector<int> read_multiple_holding_registers(int const& address, int const& len) override;
 
-  int read_input_registers(int address, int device) override;
+  int read_input_registers(int const& address) override;
 
-  void write_single_register(int address, int device, int data) override;
+  void write_single_register(int const& address, int const& data) override;
 
-  void write_multiple_registers(int address, int device, std::vector<int> const& data) override;
+  void write_multiple_registers(int const& address, std::vector<int> const& data) override;
 };
 
-class Arm {
+class Arm : public std::enable_shared_from_this<Arm> {
  private:
   rm_robot_handle* handle_{nullptr};
   rm_position_t offset_{0, 0, 0};
-  std::mutex mutex_;  // 添加互斥锁
+  std::mutex mutex_;
   bool paused_{false};
   bool stop_{false};
   double hand_len_{0};
@@ -124,13 +113,20 @@ class Arm {
 
   int stop();
 
-  std::shared_ptr<ModbusActor_RTU> connect_modbus_actor(int port, int baudrate, int timeout);
+ private:
+  std::shared_ptr<ModbusActor_RTU> modbus_actor_;
 
-  //  public:
-  //   void set_grip_position(uint16_t pose);
+ public:
+  int read_holding_registers(rm_peripheral_read_write_params_t const& params);
 
-  //   void set_grip_force(uint16_t force);
+  std::vector<int> read_multiple_holding_registers(rm_peripheral_read_write_params_t params, int const& len);
 
-  //   void set_grip_speed(uint16_t speed);
+  int read_input_registers(rm_peripheral_read_write_params_t const& params);
+
+  void write_single_register(rm_peripheral_read_write_params_t const& params, int const& data);
+
+  void write_multiple_registers(rm_peripheral_read_write_params_t params, std::vector<int> const& data);
+
+  std::weak_ptr<ModbusActor_RTU> produce_modbus_actor(int port, int baudrate, int device, int timeout);
 };
 }  // namespace Hsu

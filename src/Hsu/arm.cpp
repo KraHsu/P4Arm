@@ -1,140 +1,17 @@
 // ---- Hsu ----
 #include <Hsu/arm.h>
+#include <Hsu/hsu_module_log.h>
 #include <Hsu/matrix_ops.h>
 #include <RMArm/rm_define.h>
 // ---- stdandard ----
-#include <chrono>
 #include <memory>
 #include <stdexcept>
-#include <thread>
 #include <sys/socket.h>
 // ---- third ----
 #include <bits/stdint-intn.h>
 #include <fmt/format.h>
-#include <spdlog/sinks/basic_file_sink.h>
-#include <spdlog/spdlog.h>
 
-#define DEBUG(...) Hsu::detail::arm_logger()->debug(__VA_ARGS__)
-#define INFO(...) Hsu::detail::arm_logger()->info(__VA_ARGS__)
-#define WARN(...) Hsu::detail::arm_logger()->warn(__VA_ARGS__)
-#define ERROR(...) Hsu::detail::arm_logger()->error(__VA_ARGS__)
-
-namespace Hsu {
-ModbusActor_RTU::ModbusActor_RTU(rm_robot_handle* handle, int port) : handle_(handle), port_(port) {}
-
-int ModbusActor_RTU::read_holding_registers(int address, int device) {
-  rm_peripheral_read_write_params_t params;
-  params.port = port_;
-  params.address = address;
-  params.device = device;
-
-  int data;
-
-  auto res = detail::service_ins().rm_read_holding_registers(handle_, params, &data);
-
-  detail::throw_modbus_err(fmt::format("{}号机械臂读保持寄存器失败：", handle_->id), res);
-
-  return data;
-}
-
-std::vector<int> ModbusActor_RTU::read_multiple_holding_registers(int address, int device, int len) {
-  if (len <= 1) {
-    throw std::invalid_argument("读多寄存器时，长度必须大于1");
-  }
-
-  static const int max_registers_per_read = 12;
-
-  std::vector<int> res;
-  res.reserve(len);
-
-  rm_peripheral_read_write_params_t params;
-  params.device = device;
-  params.address = address;
-  params.port = port_;
-
-  for (int remaining = len; remaining > 0;) {
-    params.num = std::min(remaining, max_registers_per_read);
-
-    std::vector<int> temp(params.num * 2);
-
-    auto err = detail::service_ins().rm_read_multiple_holding_registers(handle_, params, temp.data());
-    detail::throw_modbus_err(fmt::format("{}号机械臂读多保持寄存器失败：", handle_->id), err);
-
-    for (int i = 0; i < params.num; ++i) {
-      int high = temp[2 * i];
-      int low = temp[2 * i + 1];
-      res.push_back((high << 8) | low);
-    }
-
-    remaining -= params.num;
-    params.address += params.num * 2;
-    std::this_thread::sleep_for(std::chrono::milliseconds(10));
-  }
-
-  return res;
-}
-
-void ModbusActor_RTU::write_multiple_registers(int address, int device, const std::vector<int>& data) {
-  if (data.size() <= 1) {
-    throw std::invalid_argument("写多寄存器时，至少写两个寄存器");
-  }
-
-  static const int max_registers_per_write = 10;
-  const int len = data.size();
-
-  std::vector<int> data_bytes;
-  data_bytes.reserve(len * 2);
-
-  for (int value : data) {
-    data_bytes.push_back((value >> 8) & 0xFF);
-    data_bytes.push_back(value & 0xFF);
-  }
-
-  rm_peripheral_read_write_params_t params;
-  params.device = device;
-  params.address = address;
-  params.port = port_;
-
-  for (int i = 0; i < len; i += max_registers_per_write) {
-    params.num = std::min(max_registers_per_write, len - i);
-
-    auto err = detail::service_ins().rm_write_registers(handle_, params, &data_bytes[i * 2]);
-
-    detail::throw_modbus_err(fmt::format("{}号机械臂写多寄存器失败：", handle_->id), err);
-
-    params.address += params.num * 2;
-
-    std::this_thread::sleep_for(std::chrono::milliseconds(10));
-  }
-}
-
-int ModbusActor_RTU::read_input_registers(int address, int device) {
-  rm_peripheral_read_write_params_t params;
-  params.port = port_;
-  params.address = address;
-  params.device = device;
-
-  int data;
-
-  auto res = detail::service_ins().rm_read_input_registers(handle_, params, &data);
-
-  detail::throw_modbus_err(fmt::format("{}号机械臂读输入寄存器失败：", handle_->id), res);
-
-  return data;
-}
-
-void ModbusActor_RTU::write_single_register(int address, int device, int data) {
-  rm_peripheral_read_write_params_t params;
-  params.port = port_;
-  params.address = address;
-  params.device = device;
-
-  auto res = detail::service_ins().rm_write_single_register(handle_, params, data);
-
-  detail::throw_modbus_err(fmt::format("{}号机械臂写单个寄存器失败：", handle_->id), res);
-}
-
-}  // namespace Hsu
+GENERATE_LOGGER(arm)
 
 namespace Hsu {
 Arm::Arm(std::string const& ip, int const& port) {
@@ -146,33 +23,6 @@ Arm::Arm(std::string const& ip, int const& port) {
   } else {
     INFO("[{}]号机械臂连接成功", handle_->id);
   }
-
-  // if (!with_grip) return;
-
-  // service.rm_set_modbus_mode(handle_, 1, 115200, 2);
-  // rm_peripheral_read_write_params_t params_coils;
-  // // 初始化夹爪，最大值、最小值运动复位
-  // int data = 0xA5;
-  // params_coils.port = 1;
-  // params_coils.address = 0x0100;
-  // params_coils.device = 1;
-  // int ret = service.rm_write_single_register(handle_, params_coils, data);
-  // DEBUG("夹爪初始化指令: {}", ret);
-  // sleep(8);
-
-  // params_coils.port = 1;
-  // params_coils.address = 0x0200;
-  // params_coils.device = 1;
-  // ret = service.rm_read_holding_registers(handle_, params_coils, &data);
-  // DEBUG("夹爪初始化指令: {}", ret);
-  // if (data == 1) {
-  //   set_grip_force(20);
-  //   sleep(1);
-  //   set_grip_speed(20);
-  //   sleep(1);
-  // } else {
-  //   throw std::runtime_error("夹爪初始化失败");
-  // }
 }
 
 Arm::~Arm() {
@@ -316,51 +166,6 @@ void Arm::set_offset(rm_position_t offset) {
   this->offset_ = offset;
 }
 
-std::shared_ptr<ModbusActor_RTU> Arm::connect_modbus_actor(int port, int baudrate, int timeout) {
-  static bool _ = true;
-  if (_) {
-    _ = false;
-
-    std::lock_guard<std::mutex> lock(mutex_);
-    auto res = detail::service_ins().rm_set_modbus_mode(handle_, port, baudrate, timeout);
-
-    detail::throw_modbus_err(fmt::format("{}号机械臂Modbus连接失败：", handle_->id), res);
-
-    return std::shared_ptr<ModbusActor_RTU>(new ModbusActor_RTU(handle_, port));
-  }
-  throw std::runtime_error("只能生产一次");
-}
-
-// void Arm::set_grip_force(uint16_t force) {
-//   std::lock_guard<std::mutex> lock(mutex_);
-//   rm_peripheral_read_write_params_t params_coils;
-//   int data = force;
-//   params_coils.port = 1;
-//   params_coils.address = 0x0101;
-//   params_coils.device = 1;
-//   int ret = detail::service_ins().rm_write_single_register(handle_, params_coils, data);
-// }
-
-// void Arm::set_grip_speed(uint16_t speed) {
-//   std::lock_guard<std::mutex> lock(mutex_);
-//   rm_peripheral_read_write_params_t params_coils;
-//   int data = speed;
-//   params_coils.port = 1;
-//   params_coils.address = 0x0104;
-//   params_coils.device = 1;
-//   int ret = detail::service_ins().rm_write_single_register(handle_, params_coils, data);
-// }
-
-// void Arm::set_grip_position(uint16_t pose) {
-//   std::lock_guard<std::mutex> lock(mutex_);
-//   rm_peripheral_read_write_params_t params_coils;
-//   int data = pose;
-//   params_coils.port = 1;
-//   params_coils.address = 0x0103;
-//   params_coils.device = 1;
-//   int ret = detail::service_ins().rm_write_single_register(handle_, params_coils, data);
-// }
-
 int Arm::pause() {
   std::lock_guard<std::mutex> lock(mutex_);
   this->paused_ = true;
@@ -393,17 +198,6 @@ void Arm::set_hand_len(double len) {
 }
 
 namespace detail {
-
-std::shared_ptr<spdlog::logger> arm_logger() {
-  std::filesystem::create_directories("./log");
-  static std::shared_ptr<spdlog::logger> LOGGER = spdlog::get("Hsu Arm Logger");
-  if (!LOGGER) {
-    LOGGER = spdlog::basic_logger_mt("Hsu Arm Logger", "./log/Hsu_arm.log");
-    LOGGER->set_pattern("[%Y-%m-%d %H:%M:%S.%e] [thread %t] [%^%l%$] %v");
-    INFO("==== New ====");
-  }
-  return LOGGER;
-}
 
 void api_log(const char* message, va_list args) {
   if (!message) {
@@ -450,10 +244,169 @@ void throw_modbus_err(std::string msg, int res) {
       msg += "返回值解析失败，接收到的数据格式不正确或不完整。";
       break;
   }
-  ERROR(msg);
   throw std::runtime_error(msg);
 }
 
 }  // namespace detail
+
+}  // namespace Hsu
+
+namespace Hsu {
+int Arm::read_holding_registers(rm_peripheral_read_write_params_t const& params) {
+  int data;
+
+  auto res = detail::service_ins().rm_read_holding_registers(handle_, params, &data);
+
+  detail::throw_modbus_err(fmt::format("{}号机械臂读保持寄存器失败：", handle_->id), res);
+
+  return data;
+}
+
+std::vector<int> Arm::read_multiple_holding_registers(rm_peripheral_read_write_params_t params, int const& len) {
+  if (len <= 1) {
+    throw std::invalid_argument("读多寄存器时，长度必须大于1");
+  }
+
+  static const int max_registers_per_read = 12;
+
+  std::vector<int> res;
+  res.reserve(len);
+
+  for (int remaining = len; remaining > 0;) {
+    params.num = std::min(remaining, max_registers_per_read);
+
+    std::vector<int> temp(params.num * 2);
+
+    auto err = detail::service_ins().rm_read_multiple_holding_registers(handle_, params, temp.data());
+    detail::throw_modbus_err(fmt::format("{}号机械臂读多保持寄存器失败：", handle_->id), err);
+
+    for (int i = 0; i < params.num; ++i) {
+      int high = temp[2 * i];
+      int low = temp[2 * i + 1];
+      res.push_back((high << 8) | low);
+    }
+
+    remaining -= params.num;
+    params.address += params.num * 2;
+    std::this_thread::sleep_for(std::chrono::milliseconds(10));
+  }
+
+  return res;
+}
+
+int Arm::read_input_registers(rm_peripheral_read_write_params_t const& params) {
+  int data;
+
+  auto res = detail::service_ins().rm_read_input_registers(handle_, params, &data);
+
+  detail::throw_modbus_err(fmt::format("{}号机械臂读输入寄存器失败：", handle_->id), res);
+
+  return data;
+}
+
+void Arm::write_single_register(rm_peripheral_read_write_params_t const& params, int const& data) {
+  auto res = detail::service_ins().rm_write_single_register(handle_, params, data);
+
+  detail::throw_modbus_err(fmt::format("{}号机械臂写单个寄存器失败：", handle_->id), res);
+}
+
+void Arm::write_multiple_registers(rm_peripheral_read_write_params_t params, std::vector<int> const& data) {
+  if (data.size() <= 1) {
+    throw std::invalid_argument("写多寄存器时，至少写两个寄存器");
+  }
+
+  static const int max_registers_per_write = 10;
+  const int len = data.size();
+
+  std::vector<int> data_bytes;
+  data_bytes.reserve(len * 2);
+
+  for (int value : data) {
+    data_bytes.push_back((value >> 8) & 0xFF);
+    data_bytes.push_back(value & 0xFF);
+  }
+
+  for (int i = 0; i < len; i += max_registers_per_write) {
+    params.num = std::min(max_registers_per_write, len - i);
+
+    auto err = detail::service_ins().rm_write_registers(handle_, params, &data_bytes[i * 2]);
+
+    detail::throw_modbus_err(fmt::format("{}号机械臂写多寄存器失败：", handle_->id), err);
+
+    params.address += params.num * 2;
+
+    std::this_thread::sleep_for(std::chrono::milliseconds(10));
+  }
+}
+
+std::weak_ptr<ModbusActor_RTU> Arm::produce_modbus_actor(int port, int baudrate, int device, int timeout) {
+  if (modbus_actor_) {
+    ERROR("每个机械臂只能生产一个Modbus接口");
+  }
+
+  std::lock_guard<std::mutex> lock(mutex_);
+  auto res = detail::service_ins().rm_set_modbus_mode(handle_, port, baudrate, timeout);
+  detail::throw_modbus_err(fmt::format("{}号机械臂Modbus连接失败：", handle_->id), res);
+  modbus_actor_ = std::shared_ptr<ModbusActor_RTU>(new ModbusActor_RTU(shared_from_this(), port, 1));
+
+  return modbus_actor_;
+}
+}  // namespace Hsu
+
+namespace Hsu {
+ModbusActor_RTU::ModbusActor_RTU(std::weak_ptr<Arm> arm, int port, int device) noexcept : arm_(arm) {
+  params_.port = port;
+  params_.device = device;
+}
+
+int ModbusActor_RTU::read_holding_registers(int const& address) {
+  params_.address = address;
+
+  if (auto arm = arm_.lock()) {
+    return arm->read_holding_registers(params_);
+  } else {
+    throw std::runtime_error("机械臂已被销毁，无法访问RTU接口");
+  }
+}
+
+std::vector<int> ModbusActor_RTU::read_multiple_holding_registers(int const& address, int const& len) {
+  params_.address = address;
+
+  if (auto arm = arm_.lock()) {
+    return arm->read_multiple_holding_registers(params_, len);
+  } else {
+    throw std::runtime_error("机械臂已被销毁，无法访问RTU接口");
+  }
+}
+
+void ModbusActor_RTU::write_multiple_registers(int const& address, std::vector<int> const& data) {
+  params_.address = address;
+
+  if (auto arm = arm_.lock()) {
+    arm->write_multiple_registers(params_, data);
+  } else {
+    throw std::runtime_error("机械臂已被销毁，无法访问RTU接口");
+  }
+}
+
+int ModbusActor_RTU::read_input_registers(int const& address) {
+  params_.address = address;
+
+  if (auto arm = arm_.lock()) {
+    return arm->read_input_registers(params_);
+  } else {
+    throw std::runtime_error("机械臂已被销毁，无法访问RTU接口");
+  }
+}
+
+void ModbusActor_RTU::write_single_register(int const& address, int const& data) {
+  params_.address = address;
+
+  if (auto arm = arm_.lock()) {
+    arm->write_single_register(params_, data);
+  } else {
+    throw std::runtime_error("机械臂已被销毁，无法访问RTU接口");
+  }
+}
 
 }  // namespace Hsu
