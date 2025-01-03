@@ -12,8 +12,6 @@ class ModbusActor_TCP;
 
 class ModbusTCP : public std::enable_shared_from_this<ModbusTCP> {
  private:
-  std::shared_ptr<ModbusActor_TCP> ma_{nullptr};
-
   std::vector<uint8_t> read_holding_registers_(uint16_t address, size_t len);
 
   std::vector<uint8_t> write_holding_registers_(uint16_t address, const uint8_t* const data, size_t N);
