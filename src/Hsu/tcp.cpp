@@ -1,27 +1,13 @@
+#include <Hsu/hsu_module_log.h>
 #include <Hsu/tcp.h>
 #include <fmt/base.h>
+#include <memory>
 #include <thread>
 #include <unordered_map>
 
 using json = nlohmann::json;
 
-#define DEBUG(...) Hsu::detail::tcp_logger()->debug(__VA_ARGS__)
-#define INFO(...) Hsu::detail::tcp_logger()->info(__VA_ARGS__)
-#define WARN(...) Hsu::detail::tcp_logger()->warn(__VA_ARGS__)
-#define ERROR(...) Hsu::detail::tcp_logger()->error(__VA_ARGS__)
-
-namespace Hsu::detail {
-std::shared_ptr<spdlog::logger> tcp_logger() {
-  std::filesystem::create_directories("./log");
-  static std::shared_ptr<spdlog::logger> LOGGER = spdlog::get("Hsu TCP Logger");
-  if (!LOGGER) {
-    LOGGER = spdlog::basic_logger_mt("Hsu TCP Logger", "./log/Hsu_tcp.log");
-    LOGGER->set_pattern("[%Y-%m-%d %H:%M:%S.%e] [thread %t] [%^%l%$] %v");
-    INFO("==== New ====");
-  }
-  return LOGGER;
-}
-}  // namespace Hsu::detail
+GENERATE_LOGGER(tcp)
 
 namespace Hsu {
 TCPConnection::TCPConnection(const std::string& host, int port)
@@ -118,34 +104,74 @@ void TCPConnection::accept_connections() {
   });
 }
 
+class TimedReader {
+ public:
+  TimedReader(boost::asio::io_context& io_context, boost::asio::ip::tcp::socket& socket)
+      : io_context_(io_context), socket_(socket), timer_(io_context) {}
+
+  void read_until_with_timeout(const std::string& delimiter, int timeout_seconds,
+                               std::function<void(const boost::system::error_code&, std::size_t)> callback) {
+    timer_.expires_after(std::chrono::seconds(timeout_seconds));
+    timer_.async_wait([this](const boost::system::error_code& ec) {
+      if (!ec) {
+        socket_.close();
+      }
+    });
+
+    boost::asio::async_read_until(socket_, buffer_, delimiter,
+                                  [this, callback](const boost::system::error_code& ec, std::size_t bytes_transferred) {
+                                    timer_.cancel();
+                                    callback(ec, bytes_transferred);
+                                  });
+  }
+
+  boost::asio::streambuf& buffer() { return buffer_; }
+
+ private:
+  boost::asio::io_context& io_context_;
+  boost::asio::ip::tcp::socket& socket_;
+  boost::asio::steady_timer timer_;
+  boost::asio::streambuf buffer_;
+};
+
 void TCPConnection::handle_client(tcp::socket client_socket) {
   try {
-    if (client_socket.is_open() && running_) {
-      boost::asio::streambuf request_buffer;
-      boost::asio::read_until(client_socket, request_buffer, '\n');
+    TimedReader reader(io_context_, client_socket);
 
-      std::istream request_stream(&request_buffer);
-      std::string request_data;
-      std::getline(request_stream, request_data);
-      json request = json::parse(request_data);
+    while (client_socket.is_open() && running_) {
+      reader.read_until_with_timeout("\n", 5, [&](const boost::system::error_code& ec, std::size_t bytes_transferred) {
+        if (!ec) {
+          std::istream request_stream(&reader.buffer());
+          std::string request_data;
+          std::getline(request_stream, request_data);
+          json request = json::parse(request_data);
 
-      INFO("接收到请求：{}", request.dump());
+          INFO("接收到请求：{}", request.dump());
 
-      std::string cmd = request["cmd"];
-      int code = request["code"];
-      json payload = request["payload"];
-      json response;
+          std::string cmd = request["cmd"];
+          int code = request["code"];
+          json payload = request["payload"];
+          json response;
 
-      if (handlers_.find(cmd) != handlers_.end()) {
-        Response res = handlers_[cmd](code, payload);
-        response = {{"cmd", cmd + "_res"}, {"code", res.code}, {"payload", res.payload}};
-      } else {
-        response = {{"cmd", cmd + "_res"}, {"code", 1}, {"payload", {{"error", "Unknown command"}}}};
-      }
+          if (handlers_.find(cmd) != handlers_.end()) {
+            Response res = handlers_[cmd](code, payload);
+            response = {{"cmd", cmd + "_res"}, {"code", res.code}, {"payload", res.payload}};
+          } else {
+            response = {{"cmd", cmd + "_res"}, {"code", 1}, {"payload", {{"error", "Unknown command"}}}};
+          }
 
-      // Send response
-      std::string serialized = response.dump();
-      boost::asio::write(client_socket, boost::asio::buffer(serialized + "\n"));
+          // 发送响应
+          std::string serialized = response.dump();
+          boost::asio::write(client_socket, boost::asio::buffer(serialized + "\n"));
+        } else if (ec == boost::asio::error::operation_aborted) {
+          WARN("处理请求超时");
+          return;
+        } else {
+          ERROR("读取请求时出现错误：{}", ec.message());
+        }
+      });
+
+      io_context_.run();  // 等待异步操作完成
     }
 
     client_socket.close();
