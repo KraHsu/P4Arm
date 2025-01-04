@@ -1,7 +1,10 @@
 #include <Hsu/hsu_module_log.h>
 #include <Hsu/tcp.h>
+#include <boost/asio/error.hpp>
 #include <fmt/base.h>
+#include <future>
 #include <memory>
+#include <stdexcept>
 #include <thread>
 #include <unordered_map>
 
@@ -109,20 +112,32 @@ class TimedReader {
   TimedReader(boost::asio::io_context& io_context, boost::asio::ip::tcp::socket& socket)
       : io_context_(io_context), socket_(socket), timer_(io_context) {}
 
-  void read_until_with_timeout(const std::string& delimiter, int timeout_seconds,
-                               std::function<void(const boost::system::error_code&, std::size_t)> callback) {
+  std::size_t read_until_with_timeout(const std::string& delimiter, int timeout_seconds,
+                                      boost::system::error_code& ec) {
+    std::promise<std::size_t> promise;
+    auto future = promise.get_future();
+
     timer_.expires_after(std::chrono::seconds(timeout_seconds));
-    timer_.async_wait([this](const boost::system::error_code& ec) {
-      if (!ec) {
-        socket_.close();
+    timer_.async_wait([this, &promise](const boost::system::error_code& timer_ec) {
+      if (!timer_ec) {
+        socket_.cancel();
       }
     });
 
-    boost::asio::async_read_until(socket_, buffer_, delimiter,
-                                  [this, callback](const boost::system::error_code& ec, std::size_t bytes_transferred) {
-                                    timer_.cancel();
-                                    callback(ec, bytes_transferred);
-                                  });
+    boost::asio::async_read_until(
+        socket_, buffer_, delimiter,
+        [this, &promise, &ec](const boost::system::error_code& read_ec, std::size_t bytes_transferred) {
+          timer_.cancel();
+          ec = read_ec;
+          if (ec == boost::asio::error::operation_aborted) {
+            ec = boost::asio::error::timed_out;  // 如果提前 cancel，异步操作错误码为 中断
+          }
+          promise.set_value(bytes_transferred);
+        });
+
+    std::size_t bytes_transferred = future.get();
+
+    return bytes_transferred;
   }
 
   boost::asio::streambuf& buffer() { return buffer_; }
@@ -137,41 +152,46 @@ class TimedReader {
 void TCPConnection::handle_client(tcp::socket client_socket) {
   try {
     TimedReader reader(io_context_, client_socket);
+    boost::system::error_code ec;
 
     while (client_socket.is_open() && running_) {
-      reader.read_until_with_timeout("\n", 5, [&](const boost::system::error_code& ec, std::size_t bytes_transferred) {
-        if (!ec) {
-          std::istream request_stream(&reader.buffer());
-          std::string request_data;
-          std::getline(request_stream, request_data);
-          json request = json::parse(request_data);
+      auto bytes_transferred = reader.read_until_with_timeout("\n", 5, ec);
 
-          INFO("接收到请求：{}", request.dump());
+      if (!ec) {
+        std::istream request_stream(&reader.buffer());
+        std::string request_data;
+        std::getline(request_stream, request_data);
+        json request = json::parse(request_data);
 
-          std::string cmd = request["cmd"];
-          int code = request["code"];
-          json payload = request["payload"];
-          json response;
+        INFO("接收到请求：{}", request.dump());
 
-          if (handlers_.find(cmd) != handlers_.end()) {
-            Response res = handlers_[cmd](code, payload);
-            response = {{"cmd", cmd + "_res"}, {"code", res.code}, {"payload", res.payload}};
-          } else {
-            response = {{"cmd", cmd + "_res"}, {"code", 1}, {"payload", {{"error", "Unknown command"}}}};
-          }
+        std::string cmd = request["cmd"];
+        int code = request["code"];
+        json payload = request["payload"];
+        json response;
 
-          // 发送响应
-          std::string serialized = response.dump();
-          boost::asio::write(client_socket, boost::asio::buffer(serialized + "\n"));
-        } else if (ec == boost::asio::error::operation_aborted) {
-          WARN("处理请求超时");
-          return;
+        if (handlers_.find(cmd) != handlers_.end()) {
+          Response res = handlers_[cmd](code, payload);
+          response = {{"cmd", cmd + "_res"}, {"code", res.code}, {"payload", res.payload}};
         } else {
-          ERROR("读取请求时出现错误：{}", ec.message());
+          response = {{"cmd", cmd + "_res"}, {"code", 1}, {"payload", {{"error", "Unknown command"}}}};
         }
-      });
 
-      io_context_.run();  // 等待异步操作完成
+        // 发送响应
+        std::string serialized = response.dump();
+        if (client_socket.is_open()) {
+          boost::asio::write(client_socket, boost::asio::buffer(serialized + "\n"));
+        }
+      } else if (ec == boost::asio::error::timed_out) {
+        WARN("处理请求超时");
+        break;
+      } else if (ec == boost::asio::error::eof) {
+        INFO("请求关闭，EOF");
+        break;
+      } else {
+        WARN("读取请求时出现错误[{}]", ec.message());
+        break;
+      }
     }
 
     client_socket.close();
