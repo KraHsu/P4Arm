@@ -57,11 +57,11 @@ fi
 
 # 执行 CMake 配置
 if $USE_VISUAL; then
-  cmake -B ./build -G Ninja -D CMAKE_EXPORT_COMPILE_COMMANDS=1 \
+  cmake -B ./$BUILD_DIR -G Ninja -D CMAKE_EXPORT_COMPILE_COMMANDS=1 \
     -D Python3_EXECUTABLE="$PYTHON_PATH" \
     -D Python3_ROOT_DIR="$(dirname $PYTHON_PATH)" \
     -D pybind11_DIR="$PYBIND11_DIR" \
     -D USE_VISUAL=ON
 else
-  cmake -B ./build -G Ninja -D CMAKE_EXPORT_COMPILE_COMMANDS=1
+  cmake -B ./$BUILD_DIR -G Ninja -D CMAKE_EXPORT_COMPILE_COMMANDS=1
 fi

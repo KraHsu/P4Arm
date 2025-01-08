@@ -1,5 +1,6 @@
 // ---- Hsu ----
 #include <Hsu/arm.h>
+#include <Hsu/frame.h>
 #include <Hsu/hand.h>
 #include <Hsu/matrix_ops.h>
 #include <Hsu/modbus_tcp.h>
@@ -78,8 +79,9 @@ void collision_detection_thread(std::shared_ptr<Hsu::Arm> arm, rm_position_t pos
   }
 }
 
-#if defined(HSU_USE_VISUAL)
+#if defined(HSU_FRAME_VISUAL)
 void test_visual() {
+  INFO("注意此时开启可视化");
   try {
     auto& sc = Hsu::Frame3DScene::instance();
 
@@ -123,7 +125,6 @@ void test_visual() {
 
   } catch (const pybind11::error_already_set& e) {
     std::cerr << "Main Error: " << e.what() << std::endl;
-    return 1;
   }
 }
 #else
