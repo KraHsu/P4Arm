@@ -1,6 +1,7 @@
 #pragma once
 
 #include <Eigen/Dense>
+#include <Eigen/src/Core/Matrix.h>
 #include <fmt/ostream.h>
 #include <memory>
 #include <mutex>
@@ -53,6 +54,16 @@ struct TranslationM {
   TranslationM(Eigen::Vector3d value);
 
   TranslationM(const HomogeneousM& homogeneous);
+};
+}  // namespace Types
+
+namespace Types {
+struct PointV;
+
+struct PointV {
+  Eigen::Vector4d value;
+
+  PointV(Eigen::Vector3d coordinate);
 };
 }  // namespace Types
 
@@ -113,7 +124,59 @@ class Frame : public std::enable_shared_from_this<Frame> {
   Sprt transform(Hsu::Types::HomogeneousM const& H, Sprt target);
 };
 
-class Point {};
+class Point : public std::enable_shared_from_this<Point> {
+  using Sprt = std::shared_ptr<Point>;
+
+ private:
+  struct PassKey {
+    explicit PassKey() {}
+  };
+
+  // std::mutex mu_;
+  std::recursive_mutex mu_;
+
+  std::shared_ptr<Frame> ref_coor_;
+
+  Hsu::Types::HomogeneousM homogeneous_;
+
+ public:
+  std::string name;
+
+ private:
+  // static std::shared_ptr<Frame> create(std::string const& name, Hsu::Types::HomogeneousM const& homogeneous) {
+  //   return std::make_shared<Frame>(PassKey(), name, );
+  // }
+
+ public:
+  // Frame(const Frame&) = delete;
+  // Frame& operator=(const Frame&) = delete;
+
+  // Frame(PassKey _, std::string const& name, Hsu::Types::HomogeneousM const& homogeneous);
+
+  // static std::shared_ptr<Frame> const WORLD_FRAME() {
+  //   static auto res = create("World", Hsu::Types::HomogeneousM());
+
+  //   res->ref_coor_ = res;
+
+  //   return res;
+  // }
+
+  // Sprt define_frame(std::string const& name, Hsu::Types::HomogeneousM const& homogeneous);
+
+  // Sprt copy(std::string const& name);
+
+  // Sprt set_rotation(Hsu::Types::RotationM const& rotation);
+
+  // Sprt set_translation(Hsu::Types::TranslationM const& translation);
+
+  // Hsu::Types::HomogeneousM get_homegeneous_relative_to(Sprt target);
+
+  // Sprt set_reference_coor(Sprt ref_coor);
+
+  // Sprt change_reference_coor(Sprt ref_coor);
+
+  // Sprt transform(Hsu::Types::HomogeneousM const& H, Sprt target);
+};
 
 class Vector {};
 

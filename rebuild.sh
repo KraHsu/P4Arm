@@ -35,7 +35,7 @@ if $USE_VISUAL; then
   fi
 
   # 检查是否安装了必要的 Python 包：matplotlib、numpy 和 pybind11
-  REQUIRED_PACKAGES=("matplotlib" "numpy" "pybind11")
+  REQUIRED_PACKAGES=("numpy" "pybind11" "vispy")
   for package in "${REQUIRED_PACKAGES[@]}"; do
     if ! $PYTHON_PATH -c "import $package" 2>/dev/null; then
       echo "错误：Python 包 '$package' 未安装，请先安装。"

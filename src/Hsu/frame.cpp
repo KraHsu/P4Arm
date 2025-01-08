@@ -1,3 +1,4 @@
+#include <Eigen/Dense>
 #include <Hsu/frame.h>
 #include <fmt/core.h>
 #include <fmt/ostream.h>
@@ -30,7 +31,7 @@ Eigen::MatrixXd pseudoInverse(const Eigen::MatrixXd& mat, double tol = 1e-9) {
   return svd.matrixV() * singularValuesInv * svd.matrixU().transpose();
 }
 
-// ---- Hsu::Types ----
+// ---- Hsu::Types RTH ----
 
 HomogeneousM::HomogeneousM() {
   value.setIdentity();
@@ -102,7 +103,7 @@ TranslationM::TranslationM(const HomogeneousM& homogeneous) {
   return;
 }
 
-// ---- Hsu ---- Frame ----
+// ---- Hsu Frame ----
 
 using Sprt = std::shared_ptr<Frame>;
 
@@ -170,8 +171,13 @@ Sprt Frame::transform(Hsu::Types::HomogeneousM const& H, Sprt target) {
   return shared_from_this();
 }
 
+// ---- Hsu::Types PVS ----
+
+// PointV::PointV(Eigen::Vector3d coordinate) : value(coordinate.head<3>()) {}
+
 // ---- VISUAL ----
 #if defined(HSU_FRAME_VISUAL)
+#include <pybind11/gil.h>
 std::string Hsu::get_current_executor_path() {
   const std::size_t MAXBUFSIZE = 2048;
   char buf[MAXBUFSIZE] = {'\0'};
@@ -203,7 +209,7 @@ Frame3DScene& Frame3DScene::begin() {
     auto sys = pybind11::module::import("sys");
     sys.attr("path").attr("append")(exec_dir);
 
-    auto Core_ = pybind11::module::import("scripts.plot_controller");
+    auto Core_ = pybind11::module::import("scripts.vispy_plot");
     auto Realtime3DScene = Core_.attr("Realtime3DScene");
     auto plot = Realtime3DScene();
 
@@ -212,27 +218,37 @@ Frame3DScene& Frame3DScene::begin() {
     state_ = READY;
 
     while (state_ != START and state_ != STOP) {
-      std::this_thread::sleep_for(std::chrono::milliseconds(100));
+      std::this_thread::sleep_for(std::chrono::milliseconds(30));
     }
 
     state_ = RUNNING;
 
     pybind11::list objs;
 
-    while (state_ == RUNNING and state_ != STOP) {
-      objs.clear();
+    pybind11::gil_scoped_release release;
 
+    while (state_ == RUNNING and state_ != STOP) {
       {
-        std::lock_guard<std::mutex> _{mu_};
-        for (auto& frame : frames_) {
-          objs.append(frame_c2p(Frame, frame));
+        pybind11::gil_scoped_acquire acquire;
+        objs.clear();
+
+        {
+          std::lock_guard<std::mutex> _{mu_};
+          for (auto& frame : frames_) {
+            objs.append(frame_c2p(Frame, frame));
+          }
         }
+
+        plot.attr("update")(objs);
       }
 
-      plot.attr("update")(objs);
+      std::this_thread::sleep_for(std::chrono::milliseconds(30));
     }
 
-    plot.attr("close")();
+    {
+      pybind11::gil_scoped_acquire acquire;
+      plot.attr("close")();
+    }
   });
 
   while (state_ != READY) {

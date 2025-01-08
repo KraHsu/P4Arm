@@ -79,7 +79,7 @@ void collision_detection_thread(std::shared_ptr<Hsu::Arm> arm, rm_position_t pos
 }
 
 #if defined(HSU_FRAME_VISUAL)
-void test_visual() {
+void VisualThread() {
   INFO("注意此时开启可视化");
   try {
     auto& sc = Hsu::Frame3DScene::instance();
@@ -127,91 +127,92 @@ void test_visual() {
   }
 }
 #else
-void test_visual() {}
+void VisualThread() {}
 #endif
 
 int main() {
-  test_visual();
+  VisualThread();
 
-  std::signal(SIGINT, signalHandler);
+  // std::signal(SIGINT, signalHandler);
 
-  set_up_main_logger();
+  // set_up_main_logger();
 
-  std::shared_ptr<Hsu::Arm> left_arm, right_arm;
+  // std::shared_ptr<Hsu::Arm> left_arm, right_arm;
 
-  std::shared_ptr<Hsu::TCPConnection> server;
+  // std::shared_ptr<Hsu::TCPConnection> server;
 
-  std::shared_ptr<Hsu::Hand> left_hand, right_hand;
+  // std::shared_ptr<Hsu::Hand> left_hand, right_hand;
 
-  std::shared_ptr<Hsu::ModbusTCP> left_tcp_modbus, right_tcp_modbus;
+  // std::shared_ptr<Hsu::ModbusTCP> left_tcp_modbus, right_tcp_modbus;
 
-  try {
-    left_arm = std::make_shared<Hsu::Arm>("192.168.1.18", 8080);
-    right_arm = std::make_shared<Hsu::Arm>("192.168.2.18", 8080);
+  // try {
+  //   left_arm = std::make_shared<Hsu::Arm>("192.168.1.18", 8080);
+  //   right_arm = std::make_shared<Hsu::Arm>("192.168.2.18", 8080);
 
-    left_tcp_modbus = std::make_shared<Hsu::ModbusTCP>("192.168.12.210", 6000);
-    right_tcp_modbus = std::make_shared<Hsu::ModbusTCP>("192.168.11.210", 6000);
+  //   left_tcp_modbus = std::make_shared<Hsu::ModbusTCP>("192.168.12.210", 6000);
+  //   right_tcp_modbus = std::make_shared<Hsu::ModbusTCP>("192.168.11.210", 6000);
 
-    left_hand = std::make_shared<Hsu::Hand>(left_tcp_modbus->produce_modbus_actor());
-    right_hand = std::make_shared<Hsu::Hand>(right_tcp_modbus->produce_modbus_actor());
+  //   left_hand = std::make_shared<Hsu::Hand>(left_tcp_modbus->produce_modbus_actor());
+  //   right_hand = std::make_shared<Hsu::Hand>(right_tcp_modbus->produce_modbus_actor());
 
-    server = std::make_shared<Hsu::TCPConnection>("127.0.0.1", 5000);
+  //   server = std::make_shared<Hsu::TCPConnection>("127.0.0.1", 5000);
 
-    server->connect("move", [&](int code, json const& payload) {
-      auto res = handle_move(left_arm, right_arm, code, payload);
-      return res;
-    });
+  //   server->connect("move", [&](int code, json const& payload) {
+  //     auto res = handle_move(left_arm, right_arm, code, payload);
+  //     return res;
+  //   });
 
-    server->connect("hand", [&](int code, json const& payload) {
-      auto res = handle_hand(left_hand, right_hand, code, payload);
-      return res;
-    });
+  //   server->connect("hand", [&](int code, json const& payload) {
+  //     auto res = handle_hand(left_hand, right_hand, code, payload);
+  //     return res;
+  //   });
 
-  } catch (std::exception const& e) {
-    ERROR(e.what());
-    return -1;
-  }
+  // } catch (std::exception const& e) {
+  //   ERROR(e.what());
+  //   return -1;
+  // }
 
-  left_arm->set_hand_len(0.0);
-  right_arm->set_hand_len(0.0);
+  // left_arm->set_hand_len(0.0);
+  // right_arm->set_hand_len(0.0);
 
-  left_arm->set_offset(rm_position_t{0, -0.209, 0});
-  right_arm->set_offset(rm_position_t{0, 0.209, 0});
+  // left_arm->set_offset(rm_position_t{0, -0.209, 0});
+  // right_arm->set_offset(rm_position_t{0, 0.209, 0});
 
-  right_arm->set_mode(1);
-  left_arm->set_mode(1);
+  // right_arm->set_mode(1);
+  // left_arm->set_mode(1);
 
-  limited_move_jp(left_arm, rm_position_t{0.7, 0.40, -0.15},
-                  rm_euler_t{-90_deg / 1_rad, 25_deg / 1_rad, -90_deg / 1_rad});
-  limited_move_jp(right_arm, rm_position_t{0.7, -0.40, -0.15},
-                  rm_euler_t{90_deg / 1_rad, 25_deg / 1_rad, 90_deg / 1_rad});
+  // limited_move_jp(left_arm, rm_position_t{0.7, 0.40, -0.15},
+  //                 rm_euler_t{-90_deg / 1_rad, 25_deg / 1_rad, -90_deg / 1_rad});
+  // limited_move_jp(right_arm, rm_position_t{0.7, -0.40, -0.15},
+  //                 rm_euler_t{90_deg / 1_rad, 25_deg / 1_rad, 90_deg / 1_rad});
 
-  Hsu::Hand::Angles open_angles(176_deg, 176_deg, 176_deg, 176_deg, 70_deg, 120_deg);
-  Hsu::Hand::Angles close_angles(20_deg, 20_deg, 20_deg, 20_deg, 50_deg, 90_deg);
+  // Hsu::Hand::Angles open_angles(176_deg, 176_deg, 176_deg, 176_deg, 70_deg, 120_deg);
+  // Hsu::Hand::Angles close_angles(20_deg, 20_deg, 20_deg, 20_deg, 50_deg, 90_deg);
 
-  left_hand->set_angles(close_angles);
-  right_hand->set_angles(close_angles);
+  // left_hand->set_angles(close_angles);
+  // right_hand->set_angles(close_angles);
 
-  sleep_s(2);
+  // sleep_s(2);
 
-  left_hand->set_angles(open_angles);
-  right_hand->set_angles(open_angles);
+  // left_hand->set_angles(open_angles);
+  // right_hand->set_angles(open_angles);
 
-  server->start_server();
+  // server->start_server();
 
-  // std::thread left_cd(collision_detection_thread, left_arm, rm_position_t{0.6, 0.159, -0.2}, collision_detected);
-  // std::thread right_cd(collision_detection_thread, right_arm, rm_position_t{0.6, -0.159, -0.2}, collision_detected);
+  // // std::thread left_cd(collision_detection_thread, left_arm, rm_position_t{0.6, 0.159, -0.2}, collision_detected);
+  // // std::thread right_cd(collision_detection_thread, right_arm, rm_position_t{0.6, -0.159, -0.2},
+  // collision_detected);
 
-  WHILE_RUNNING { sleep_ms(500); }
+  // WHILE_RUNNING { sleep_ms(500); }
 
-  INFO("主程序已停止");
+  // INFO("主程序已停止");
 
-  server->stop_server();
+  // server->stop_server();
 
-  // // left_cd.join();
-  // // right_cd.join();
+  // // // left_cd.join();
+  // // // right_cd.join();
 
-  return 0;
+  // return 0;
 }
 
 void set_up_main_logger() {

@@ -3,8 +3,6 @@
 #include <boost/asio/error.hpp>
 #include <fmt/base.h>
 #include <future>
-#include <memory>
-#include <stdexcept>
 #include <thread>
 #include <unordered_map>
 
