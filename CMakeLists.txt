@@ -101,8 +101,6 @@ if (spdlog_VERSION VERSION_LESS "1.9.0")
     message(FATAL_ERROR "spdlog version must be at least 1.9.0 to support external fmt")
 endif()
 
-<<<<<<< HEAD
-=======
 option(USE_VISUAL "使用开启可视化功能" OFF)
 
 if(USE_VISUAL)
@@ -133,7 +131,6 @@ if(USE_VISUAL)
 
     add_dependencies(${CMAKE_PROJECT_NAME}_with_visual copy_python)
 endif()
->>>>>>> bf96cb6... 提供 --visual 编译选项，修复运行时库错误
 
 # 启用详细输出
 set(CMAKE_VERBOSE_MAKEFILE ON)

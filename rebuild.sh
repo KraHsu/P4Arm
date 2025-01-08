@@ -55,9 +55,6 @@ if [ -d "$BUILD_DIR" ]; then
   rm -rf $BUILD_DIR
 fi
 
-<<<<<<< HEAD
-cmake -B ./build -G Ninja -D CMAKE_EXPORT_COMPILE_COMMANDS=1
-=======
 # 执行 CMake 配置
 if $USE_VISUAL; then
   cmake -B ./build -G Ninja -D CMAKE_EXPORT_COMPILE_COMMANDS=1 \
@@ -68,4 +65,3 @@ if $USE_VISUAL; then
 else
   cmake -B ./build -G Ninja -D CMAKE_EXPORT_COMPILE_COMMANDS=1
 fi
->>>>>>> bf96cb6... 提供 --visual 编译选项，修复运行时库错误

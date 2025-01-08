@@ -78,9 +78,6 @@ void collision_detection_thread(std::shared_ptr<Hsu::Arm> arm, rm_position_t pos
   }
 }
 
-<<<<<<< HEAD
-int main() {
-=======
 #if defined(HSU_USE_VISUAL)
 void test_visual() {
   try {
@@ -136,7 +133,6 @@ void test_visual() {}
 int main() {
   test_visual();
 
->>>>>>> bf96cb6... 提供 --visual 编译选项，修复运行时库错误
   std::signal(SIGINT, signalHandler);
   set_up_main_logger();
 
