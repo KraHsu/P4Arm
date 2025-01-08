@@ -74,7 +74,7 @@ std::vector<uint8_t> ModbusTCP::read_holding_registers(uint16_t address, size_t 
   while (size > 0) {
     auto read_size = std::min<size_t>(size, 250U);
     auto response = read_holding_registers_(address, read_size);
-    res.insert(res.end(), response.begin(), response.end());
+    res.insert(res.end(), response.begin() + 2, response.end());
     size -= read_size;
   }
   return res;
@@ -210,7 +210,7 @@ std::vector<int> ModbusActor_TCP::read_multiple_holding_registers(int const& add
     result.reserve(len);
 
     for (int i = 0; i < len; i++) {
-      result[i] = res[2 * i] << 8 | res[2 * i + 1];
+      result.push_back(res[2 * i] << 8 | res[2 * i + 1]);
     }
 
     return result;
@@ -218,7 +218,7 @@ std::vector<int> ModbusActor_TCP::read_multiple_holding_registers(int const& add
     ERROR("tcp已销毁，接口失效");
   }
 
-  return {};
+  return {-1024};
 };
 
 int ModbusActor_TCP::read_input_registers(int const& address) {
