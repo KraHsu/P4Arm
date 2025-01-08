@@ -78,7 +78,9 @@ void collision_detection_thread(std::shared_ptr<Hsu::Arm> arm, rm_position_t pos
   }
 }
 
-int main() {
+#if defined(HSU_FRAME_VISUAL)
+void test_visual() {
+  INFO("注意此时开启可视化");
   try {
     auto& sc = Hsu::Frame3DScene::instance();
 
@@ -122,8 +124,14 @@ int main() {
 
   } catch (const pybind11::error_already_set& e) {
     std::cerr << "Main Error: " << e.what() << std::endl;
-    return 1;
   }
+}
+#else
+void test_visual() {}
+#endif
+
+int main() {
+  test_visual();
 
   std::signal(SIGINT, signalHandler);
 

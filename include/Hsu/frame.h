@@ -5,10 +5,7 @@
 #include <memory>
 #include <mutex>
 #include <string>
-#include <thread>
 #include <units.h>
-
-#define HSU_FRAME_VISUAL
 
 namespace Hsu {
 namespace Types {
@@ -128,6 +125,7 @@ class DirectedSegment {};
 #include <pybind11/embed.h>  // 引入pybind11嵌入头文件
 #include <pybind11/numpy.h>
 #include <pybind11/pytypes.h>
+#include <thread>
 
 namespace Hsu {
 template <typename T, int Rows, int Cols>
