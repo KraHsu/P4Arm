@@ -101,6 +101,39 @@ if (spdlog_VERSION VERSION_LESS "1.9.0")
     message(FATAL_ERROR "spdlog version must be at least 1.9.0 to support external fmt")
 endif()
 
+<<<<<<< HEAD
+=======
+option(USE_VISUAL "使用开启可视化功能" OFF)
+
+if(USE_VISUAL)
+    message(STATUS "pybind11_DIR is set: " ${pybind11_DIR})
+
+    find_package(Python3 REQUIRED COMPONENTS Interpreter Development)
+    set(PYBIND11_FINDPYTHON ON)
+    find_package(pybind11 REQUIRED)
+
+    add_executable(${CMAKE_PROJECT_NAME}_with_visual ${SOURCES})
+
+    target_include_directories(${CMAKE_PROJECT_NAME}_with_visual PRIVATE $<TARGET_PROPERTY:${CMAKE_PROJECT_NAME},INCLUDE_DIRECTORIES>)
+    target_compile_options(${CMAKE_PROJECT_NAME}_with_visual PRIVATE $<TARGET_PROPERTY:${CMAKE_PROJECT_NAME},COMPILE_OPTIONS>)
+    target_compile_features(${CMAKE_PROJECT_NAME}_with_visual PRIVATE $<TARGET_PROPERTY:${CMAKE_PROJECT_NAME},COMPILE_FEATURES>)
+    target_link_libraries(${CMAKE_PROJECT_NAME}_with_visual $<TARGET_PROPERTY:${CMAKE_PROJECT_NAME},LINK_LIBRARIES>)
+
+    target_link_libraries(${CMAKE_PROJECT_NAME}_with_visual pybind11::embed Python3::Python)
+
+    # 为 ${CMAKE_PROJECT_NAME}_with_visual 添加宏定义
+    target_compile_definitions(${CMAKE_PROJECT_NAME}_with_visual PRIVATE HSU_FRAME_VISUAL)
+
+    # 添加一个 custom target 用于复制 Python 脚本
+    add_custom_target(copy_python ALL
+        COMMAND ${CMAKE_COMMAND} -E copy_directory
+        ${CMAKE_SOURCE_DIR}/py_scripts ${CMAKE_BINARY_DIR}/scripts
+        COMMENT "Copying Python scripts to build directory"
+    )
+
+    add_dependencies(${CMAKE_PROJECT_NAME}_with_visual copy_python)
+endif()
+>>>>>>> bf96cb6... 提供 --visual 编译选项，修复运行时库错误
 
 # 启用详细输出
 set(CMAKE_VERBOSE_MAKEFILE ON)
