@@ -117,8 +117,8 @@ int main() {
     return -1;
   }
 
-  left_arm->set_hand_len(0.14);
-  right_arm->set_hand_len(0.14);
+  left_arm->set_hand_len(0.0);
+  right_arm->set_hand_len(0.0);
 
   left_arm->set_offset(rm_position_t{0, -0.209, 0});
   right_arm->set_offset(rm_position_t{0, 0.209, 0});
