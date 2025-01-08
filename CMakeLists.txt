@@ -10,7 +10,6 @@ set(CMAKE_C_STANDARD 11)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_STANDARD 17)
 
-
 set(CMAKE_PROJECT_NAME RM_Arm)
 
 # 设置源文件
@@ -100,6 +99,23 @@ target_include_directories(${CMAKE_PROJECT_NAME} SYSTEM PRIVATE
 if (spdlog_VERSION VERSION_LESS "1.9.0")
     message(FATAL_ERROR "spdlog version must be at least 1.9.0 to support external fmt")
 endif()
+
+message(STATUS "pybind11_DIR is set: " ${pybind11_DIR})
+
+find_package(Python3 REQUIRED COMPONENTS Interpreter Development)
+
+set(PYBIND11_FINDPYTHON ON)
+find_package(pybind11 REQUIRED)
+
+target_link_libraries(${CMAKE_PROJECT_NAME} pybind11::embed Python3::Python)
+
+add_custom_target(copy_python ALL
+    COMMAND ${CMAKE_COMMAND} -E copy_directory
+    ${CMAKE_SOURCE_DIR}/py_scripts ${CMAKE_BINARY_DIR}/scripts
+    COMMENT "Copying Python scripts to build directory"
+)
+
+add_dependencies(${CMAKE_PROJECT_NAME} copy_python)
 
 
 # 启用详细输出

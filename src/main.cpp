@@ -1,5 +1,6 @@
 // ---- Hsu ----
 #include <Hsu/arm.h>
+#include <Hsu/frame.h>
 #include <Hsu/hand.h>
 #include <Hsu/matrix_ops.h>
 #include <Hsu/modbus_tcp.h>
@@ -12,7 +13,6 @@
 #include <cstdlib>
 #include <exception>
 #include <functional>
-#include <iostream>
 #include <memory>
 #include <string>
 #include <thread>
@@ -79,7 +79,54 @@ void collision_detection_thread(std::shared_ptr<Hsu::Arm> arm, rm_position_t pos
 }
 
 int main() {
+  try {
+    auto& sc = Hsu::Frame3DScene::instance();
+
+    sc.begin();
+
+    auto world = Hsu::Frame::WORLD_FRAME();
+
+    Hsu::Types::RotationM ArmLR;
+    Hsu::Types::TranslationM ArmLT;
+    ArmLT.value << 0, 0.209, 0;
+    Hsu::Types::HomogeneousM ArmLH(ArmLR, ArmLT);
+
+    auto ArmL = world->define_frame("ArmL", ArmLH);
+
+    Hsu::Types::RotationM ArmRR;
+    Hsu::Types::TranslationM ArmRT;
+    ArmRT.value << 0, -0.209, 0;
+    Hsu::Types::HomogeneousM ArmRH(ArmRR, ArmRT);
+
+    auto ArmR = world->define_frame("ArmR", ArmRH);
+
+    sc.start();
+
+    std::this_thread::sleep_for(std::chrono::seconds(1));
+
+    sc.add_obj(world).add_obj(ArmL).add_obj(ArmR);
+
+    std::this_thread::sleep_for(std::chrono::seconds(1));
+
+    for (int i = 0; i < 50; i++) {
+      ArmL->transform(ArmLT, ArmL);
+      std::this_thread::sleep_for(std::chrono::milliseconds(30));
+    }
+
+    for (int i = 0; i < 50; i++) {
+      ArmR->transform(ArmRT, ArmL);
+      std::this_thread::sleep_for(std::chrono::milliseconds(30));
+    }
+
+    sc.stop();
+
+  } catch (const pybind11::error_already_set& e) {
+    std::cerr << "Main Error: " << e.what() << std::endl;
+    return 1;
+  }
+
   std::signal(SIGINT, signalHandler);
+
   set_up_main_logger();
 
   std::shared_ptr<Hsu::Arm> left_arm, right_arm;
