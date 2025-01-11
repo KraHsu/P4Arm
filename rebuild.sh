@@ -4,7 +4,7 @@
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
   echo "错误：请通过 'source' 命令执行此脚本，例如："
   echo "source $0"
-  return 1
+  exit 1
 fi
 
 # 设置构建目录

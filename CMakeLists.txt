@@ -128,7 +128,14 @@ if(USE_VISUAL)
         COMMENT "Copying Python scripts to build directory"
     )
 
+    add_custom_target(copy_assets ALL
+        COMMAND ${CMAKE_COMMAND} -E copy_directory
+        ${CMAKE_SOURCE_DIR}/assets ${CMAKE_BINARY_DIR}/assets
+        COMMENT "Copying assets to build directory"
+    )
+
     add_dependencies(${CMAKE_PROJECT_NAME}_with_visual copy_python)
+    add_dependencies(${CMAKE_PROJECT_NAME}_with_visual copy_assets)
 endif()
 
 # 启用详细输出

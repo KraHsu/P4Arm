@@ -10,12 +10,14 @@
 #include <RMArm/rm_service.h>
 // ---- standard ----
 #include <chrono>
+#include <cmath>
 #include <cstdlib>
 #include <exception>
 #include <functional>
 #include <memory>
 #include <string>
 #include <thread>
+#include <vector>
 #include <sys/time.h>
 #include <termios.h>
 #include <unistd.h>
@@ -79,6 +81,7 @@ void collision_detection_thread(std::shared_ptr<Hsu::Arm> arm, rm_position_t pos
 }
 
 #if defined(HSU_FRAME_VISUAL)
+#include <pybind11/pytypes.h>
 void VisualThread() {
   INFO("注意此时开启可视化");
   try {
@@ -86,39 +89,112 @@ void VisualThread() {
 
     sc.begin();
 
-    auto world = Hsu::Frame::WORLD_FRAME();
-
-    Hsu::Types::RotationM ArmLR;
-    Hsu::Types::TranslationM ArmLT;
-    ArmLT.value << 0, 0.209, 0;
-    Hsu::Types::HomogeneousM ArmLH(ArmLR, ArmLT);
-
-    auto ArmL = world->define_frame("ArmL", ArmLH);
-
-    Hsu::Types::RotationM ArmRR;
-    Hsu::Types::TranslationM ArmRT;
-    ArmRT.value << 0, -0.209, 0;
-    Hsu::Types::HomogeneousM ArmRH(ArmRR, ArmRT);
-
-    auto ArmR = world->define_frame("ArmR", ArmRH);
-
     sc.start();
 
     std::this_thread::sleep_for(std::chrono::seconds(1));
 
-    sc.add_obj(world).add_obj(ArmL).add_obj(ArmR);
+    Hsu::Arm::Frames frames_l;
+    Hsu::Arm::Frames frames_r;
 
-    std::this_thread::sleep_for(std::chrono::seconds(1));
+    Hsu::Types::RotationM R;
+    Hsu::Types::TranslationM T;
+    double d = std::sqrt(2) / 2;
 
-    for (int i = 0; i < 50; i++) {
-      ArmL->transform(ArmLT, ArmL);
-      std::this_thread::sleep_for(std::chrono::milliseconds(30));
+    R.value.row(0) << +0, +1, +0;
+    R.value.row(1) << +d, +0, +d;
+    R.value.row(2) << +d, +0, -d;
+    T.value << 0, 0.209, 0;
+
+    frames_l.set_base_offset({R, T});
+
+    R.value.row(0) << +0, -1, +0;
+    R.value.row(1) << -d, +0, -d;
+    R.value.row(2) << +d, +0, -d;
+    T.value << 0, -0.209, 0;
+
+    frames_r.set_base_offset({R, T});
+
+    sc.set_arm_l_data(frames_l.get_data());
+    sc.set_arm_r_data(frames_r.get_data());
+
+    auto deg = 0_deg;
+
+    frames_l.set_joint_angle(1, 90_deg);
+    frames_r.set_joint_angle(1, -90_deg);
+
+    double duration = 5.0;                             // 总时间
+    double total_angle = 90.0;                         // 总角度
+    double angular_velocity = total_angle / duration;  // 每秒旋转的角速度
+
+    auto begin = std::chrono::steady_clock::now();
+
+    while (true) {
+      // 获取当前时间
+      auto now = std::chrono::steady_clock::now();
+      std::chrono::duration<double> elapsed = now - begin;  // 计算经过的时间
+
+      // 如果超过5秒，停止
+      if (elapsed.count() >= duration) {
+        break;
+      }
+
+      // 计算当前角度
+      auto angle = angular_velocity * elapsed.count() * 1_deg;  // 当前角度
+      frames_r.set_joint_angle(2, angle);                       // 设置右臂关节角度
+      frames_l.set_joint_angle(2, angle);
+
+      // 更新数据
+      sc.set_arm_l_data(frames_l.get_data());
+      sc.set_arm_r_data(frames_r.get_data());
     }
 
-    for (int i = 0; i < 50; i++) {
-      ArmR->transform(ArmRT, ArmL);
-      std::this_thread::sleep_for(std::chrono::milliseconds(30));
+    duration = 3.0;                             // 总时间
+    total_angle = 60.0;                         // 总角度
+    angular_velocity = total_angle / duration;  // 每秒旋转的角速度
+
+    begin = std::chrono::steady_clock::now();
+
+    while (true) {
+      // 获取当前时间
+      auto now = std::chrono::steady_clock::now();
+      std::chrono::duration<double> elapsed = now - begin;  // 计算经过的时间
+
+      // 如果超过5秒，停止
+      if (elapsed.count() >= duration) {
+        break;
+      }
+
+      // 计算当前角度
+      auto angle = angular_velocity * elapsed.count() * 1_deg;  // 当前角度
+      frames_r.set_joint_angle(7, -angle);                      // 设置右臂关节角度
+      frames_l.set_joint_angle(7, angle);
+
+      // 更新数据
+      sc.set_arm_l_data(frames_l.get_data());
+      sc.set_arm_r_data(frames_r.get_data());
     }
+
+    // sc.add_frames(world)
+    //     .add_frames(base_link_l)
+    //     .add_frames(link1_l)
+    //     .add_frames(link2_l)
+    //     .add_frames(link3_l)
+    //     .add_frames(link4_l)
+    //     .add_frames(link5_l)
+    //     .add_frames(link6_l)
+    //     .add_frames(link7_l)
+    //     .add_frames(base_link_r)
+    //     .add_frames(link1_r)
+    //     .add_frames(link2_r)
+    //     .add_frames(link3_r)
+    //     .add_frames(link4_r)
+    //     .add_frames(link5_r)
+    //     .add_frames(link6_r)
+    //     .add_frames(link7_r);
+
+    int x;
+
+    std::cin >> x;
 
     sc.stop();
 
@@ -131,46 +207,46 @@ void VisualThread() {}
 #endif
 
 int main() {
-  VisualThread();
+  // VisualThread();
 
-  // std::signal(SIGINT, signalHandler);
+  std::signal(SIGINT, signalHandler);
 
-  // set_up_main_logger();
+  set_up_main_logger();
 
-  // std::shared_ptr<Hsu::Arm> left_arm, right_arm;
+  std::shared_ptr<Hsu::Arm> left_arm, right_arm;
 
-  // std::shared_ptr<Hsu::TCPConnection> server;
+  std::shared_ptr<Hsu::TCPConnection> server;
 
-  // std::shared_ptr<Hsu::Hand> left_hand, right_hand;
+  std::shared_ptr<Hsu::Hand> left_hand, right_hand;
 
-  // std::shared_ptr<Hsu::ModbusTCP> left_tcp_modbus, right_tcp_modbus;
+  std::shared_ptr<Hsu::ModbusTCP> left_tcp_modbus, right_tcp_modbus;
 
-  // try {
-  //   left_arm = std::make_shared<Hsu::Arm>("192.168.1.18", 8080);
-  //   right_arm = std::make_shared<Hsu::Arm>("192.168.2.18", 8080);
+  try {
+    left_arm = std::make_shared<Hsu::Arm>("192.168.1.18", 8080);
+    right_arm = std::make_shared<Hsu::Arm>("192.168.2.18", 8080);
 
-  //   left_tcp_modbus = std::make_shared<Hsu::ModbusTCP>("192.168.12.210", 6000);
-  //   right_tcp_modbus = std::make_shared<Hsu::ModbusTCP>("192.168.11.210", 6000);
+    left_tcp_modbus = std::make_shared<Hsu::ModbusTCP>("192.168.12.210", 6000);
+    right_tcp_modbus = std::make_shared<Hsu::ModbusTCP>("192.168.11.210", 6000);
 
-  //   left_hand = std::make_shared<Hsu::Hand>(left_tcp_modbus->produce_modbus_actor());
-  //   right_hand = std::make_shared<Hsu::Hand>(right_tcp_modbus->produce_modbus_actor());
+    left_hand = std::make_shared<Hsu::Hand>(left_tcp_modbus->produce_modbus_actor());
+    right_hand = std::make_shared<Hsu::Hand>(right_tcp_modbus->produce_modbus_actor());
 
-  //   server = std::make_shared<Hsu::TCPConnection>("127.0.0.1", 5000);
+    server = std::make_shared<Hsu::TCPConnection>("127.0.0.1", 5000);
 
-  //   server->connect("move", [&](int code, json const& payload) {
-  //     auto res = handle_move(left_arm, right_arm, code, payload);
-  //     return res;
-  //   });
+    server->connect("move", [&](int code, json const& payload) {
+      auto res = handle_move(left_arm, right_arm, code, payload);
+      return res;
+    });
 
-  //   server->connect("hand", [&](int code, json const& payload) {
-  //     auto res = handle_hand(left_hand, right_hand, code, payload);
-  //     return res;
-  //   });
+    server->connect("hand", [&](int code, json const& payload) {
+      auto res = handle_hand(left_hand, right_hand, code, payload);
+      return res;
+    });
 
-  // } catch (std::exception const& e) {
-  //   ERROR(e.what());
-  //   return -1;
-  // }
+  } catch (std::exception const& e) {
+    ERROR(e.what());
+    return -1;
+  }
 
   // left_arm->set_hand_len(0.0);
   // right_arm->set_hand_len(0.0);
@@ -178,8 +254,8 @@ int main() {
   // left_arm->set_offset(rm_position_t{0, -0.209, 0});
   // right_arm->set_offset(rm_position_t{0, 0.209, 0});
 
-  // right_arm->set_mode(1);
-  // left_arm->set_mode(1);
+  right_arm->set_mode(1);
+  left_arm->set_mode(1);
 
   // limited_move_jp(left_arm, rm_position_t{0.7, 0.40, -0.15},
   //                 rm_euler_t{-90_deg / 1_rad, 25_deg / 1_rad, -90_deg / 1_rad});
@@ -197,22 +273,60 @@ int main() {
   // left_hand->set_angles(open_angles);
   // right_hand->set_angles(open_angles);
 
-  // server->start_server();
+  server->start_server();
 
-  // // std::thread left_cd(collision_detection_thread, left_arm, rm_position_t{0.6, 0.159, -0.2}, collision_detected);
-  // // std::thread right_cd(collision_detection_thread, right_arm, rm_position_t{0.6, -0.159, -0.2},
-  // collision_detected);
+  // std::thread left_cd(collision_detection_thread, left_arm, rm_position_t{0.6, 0.159, -0.2}, collision_detected);
+  // std::thread right_cd(collision_detection_thread, right_arm, rm_position_t{0.6, -0.159, -0.2}, collision_detected);
+#if defined(HSU_FRAME_VISUAL)
+  try {
+    auto& sc = Hsu::Frame3DScene::instance();
 
-  // WHILE_RUNNING { sleep_ms(500); }
+    sc.begin();
 
-  // INFO("主程序已停止");
+    sc.start();
 
-  // server->stop_server();
+    std::this_thread::sleep_for(std::chrono::seconds(1));
 
-  // // // left_cd.join();
-  // // // right_cd.join();
+    Hsu::Types::RotationM R;
+    Hsu::Types::TranslationM T;
+    double d = std::sqrt(2) / 2;
 
-  // return 0;
+    R.value.row(0) << +0, +1, +0;
+    R.value.row(1) << +d, +0, +d;
+    R.value.row(2) << +d, +0, -d;
+    T.value << 0, 0.209, 0;
+
+    left_arm->set_base_offset({R, T});
+
+    R.value.row(0) << +0, -1, +0;
+    R.value.row(1) << -d, +0, -d;
+    R.value.row(2) << +d, +0, -d;
+    T.value << 0, -0.209, 0;
+
+    right_arm->set_base_offset({R, T});
+
+    WHILE_RUNNING {
+      sc.set_arm_l_data(left_arm->get_frames_data());
+      sc.set_arm_r_data(right_arm->get_frames_data());
+
+      sleep_ms(100);
+    }
+
+    sc.stop();
+  } catch (const pybind11::error_already_set& e) {
+    std::cerr << "Main Error: " << e.what() << std::endl;
+  }
+#else
+  WHILE_RUNNING { sleep_ms(100); }
+#endif
+  INFO("主程序已停止");
+
+  server->stop_server();
+
+  // // left_cd.join();
+  // // right_cd.join();
+
+  return 0;
 }
 
 void set_up_main_logger() {

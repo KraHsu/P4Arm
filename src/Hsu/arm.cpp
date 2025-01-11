@@ -1,4 +1,5 @@
 // ---- Hsu ----
+#include "units.h"
 #include <Hsu/arm.h>
 #include <Hsu/hsu_module_log.h>
 #include <Hsu/matrix_ops.h>
@@ -159,6 +160,35 @@ rm_current_arm_state_t Arm::get_state() {
   state.pose.position.z = real_pos[2];
 
   return state;
+}
+
+std::array<units::angle::radian_t, 7> Arm::read_joint_angle() {
+  std::lock_guard<std::mutex> lock(mutex_);
+  rm_current_arm_state_t state;
+
+  float tmp[7];
+  std::array<units::angle::radian_t, 7> result;
+
+  auto res = detail::service_ins().rm_get_joint_degree(handle_, tmp);
+  detail::throw_modbus_err("查询关节角：", res);
+
+  for (int i = 0; i < 7; i++) {
+    result[i] = tmp[i] * units::angle::degree_t(1);
+    frame_.set_joint_angle(i + 1, result[i]);
+  }
+
+  return result;
+}
+
+std::array<Types::HomogeneousM, 8> Arm::get_frames_data() {
+  read_joint_angle();
+
+  return frame_.get_data();
+}
+
+void Arm::set_base_offset(Types::HomogeneousM offset) {
+  frame_.set_base_offset(offset);
+  return;
 }
 
 void Arm::set_offset(rm_position_t offset) {

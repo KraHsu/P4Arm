@@ -133,6 +133,13 @@ Sprt Frame::set_translation(Hsu::Types::TranslationM const& translation) {
   return shared_from_this();
 }
 
+Sprt Frame::set_homegeneous(Hsu::Types::HomogeneousM const& homegeneous) {
+  std::lock_guard<std::recursive_mutex> _{mu_};
+  homogeneous_.value = homegeneous.value;
+
+  return shared_from_this();
+}
+
 Hsu::Types::HomogeneousM Frame::get_homegeneous_relative_to(Sprt target) {
   std::lock_guard<std::recursive_mutex> _{mu_};
   if (target == shared_from_this()) {
@@ -178,6 +185,8 @@ Sprt Frame::transform(Hsu::Types::HomogeneousM const& H, Sprt target) {
 // ---- VISUAL ----
 #if defined(HSU_FRAME_VISUAL)
 #include <pybind11/gil.h>
+#include <pybind11/pytypes.h>
+#include <pyconfig.h>
 std::string Hsu::get_current_executor_path() {
   const std::size_t MAXBUFSIZE = 2048;
   char buf[MAXBUFSIZE] = {'\0'};
@@ -202,6 +211,7 @@ Frame3DScene& Frame3DScene::begin() {
 
   main_ = new std::thread([&]() {
     pybind11::scoped_interpreter guard;
+
     pybind11::gil_scoped_acquire acquire;
 
     auto exec_dir = get_current_executor_path();
@@ -209,45 +219,53 @@ Frame3DScene& Frame3DScene::begin() {
     auto sys = pybind11::module::import("sys");
     sys.attr("path").attr("append")(exec_dir);
 
-    auto Core_ = pybind11::module::import("scripts.vispy_plot");
-    auto Realtime3DScene = Core_.attr("Realtime3DScene");
-    auto plot = Realtime3DScene();
+    auto Core_ = pybind11::module::import("scripts.vispy_scene");
+    auto VispyScene = Core_.attr("VispyScene");
+    auto scene = VispyScene();
 
     auto Frame = Core_.attr("Frame");
+
+    pybind11::dict data;
+    pybind11::list list_l;
+    pybind11::list list_r;
+
+    for (int i = 0; i < 8; i++) {
+      list_l.append(pybind11::none{});
+      list_r.append(pybind11::none{});
+    }
+
+    pybind11::gil_scoped_release release;
 
     state_ = READY;
 
     while (state_ != START and state_ != STOP) {
-      std::this_thread::sleep_for(std::chrono::milliseconds(30));
+      std::this_thread::sleep_for(std::chrono::milliseconds(100));
     }
 
     state_ = RUNNING;
 
-    pybind11::list objs;
-
-    pybind11::gil_scoped_release release;
-
     while (state_ == RUNNING and state_ != STOP) {
       {
         pybind11::gil_scoped_acquire acquire;
-        objs.clear();
 
-        {
-          std::lock_guard<std::mutex> _{mu_};
-          for (auto& frame : frames_) {
-            objs.append(frame_c2p(Frame, frame));
-          }
+        for (int i = 0; i < 8; i++) {
+          list_l[i] = eigen_to_numpy(arm_left_[i].value);
+          list_r[i] = eigen_to_numpy(arm_right_[i].value);
         }
 
-        plot.attr("update")(objs);
+        data["ArmL"] = list_l;
+        data["ArmR"] = list_r;
+
+        scene.attr("update")(data);
       }
 
-      std::this_thread::sleep_for(std::chrono::milliseconds(30));
+      std::this_thread::sleep_for(std::chrono::milliseconds(15));
     }
 
     {
+      std::cout << "close" << std::endl;
       pybind11::gil_scoped_acquire acquire;
-      plot.attr("close")();
+      scene.attr("close")();
     }
   });
 
@@ -258,11 +276,23 @@ Frame3DScene& Frame3DScene::begin() {
   return *this;
 }
 
-Frame3DScene& Frame3DScene::add_obj(std::shared_ptr<Hsu::Frame> frame) {
-  std::lock_guard<std::mutex> _{mu_};
-  frames_.push_back(frame);
+Frame3DScene& Frame3DScene::set_arm_r_data(std::array<Types::HomogeneousM, 8> const& data) {
+  arm_right_ = data;
   return *this;
 }
+
+Frame3DScene& Frame3DScene::set_arm_l_data(std::array<Types::HomogeneousM, 8> const& data) {
+  arm_left_ = data;
+  return *this;
+}
+
+// Frame3DScene& Frame3DScene::set_data(std::string const& name, pybind11::object const& obj) {
+//   std::lock_guard<std::mutex> _{mu_};
+//   if (data_) {
+//     (*data_)[name.c_str()] = obj;
+//   }
+//   return *this;
+// }
 
 Frame3DScene& Frame3DScene::start() {
   if (state_ != READY) return *this;

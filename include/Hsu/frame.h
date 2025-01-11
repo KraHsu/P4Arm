@@ -3,6 +3,7 @@
 #include <Eigen/Dense>
 #include <Eigen/src/Core/Matrix.h>
 #include <fmt/ostream.h>
+#include <array>
 #include <memory>
 #include <mutex>
 #include <string>
@@ -115,6 +116,8 @@ class Frame : public std::enable_shared_from_this<Frame> {
 
   Sprt set_translation(Hsu::Types::TranslationM const& translation);
 
+  Sprt set_homegeneous(Hsu::Types::HomogeneousM const& homegeneous);
+
   Hsu::Types::HomogeneousM get_homegeneous_relative_to(Sprt target);
 
   Sprt set_reference_coor(Sprt ref_coor);
@@ -208,8 +211,10 @@ class Frame3DScene {
 
   Status state_{STOP};
 
-  std::mutex mu_;
-  std::vector<std::shared_ptr<Hsu::Frame>> frames_;
+  // std::vector<Frame> frame_list;
+
+  std::array<Types::HomogeneousM, 8> arm_left_;
+  std::array<Types::HomogeneousM, 8> arm_right_;
 
   std::thread* main_;
 
@@ -221,13 +226,13 @@ class Frame3DScene {
 
   static Frame3DScene& instance() {
     static Frame3DScene ins(Passkey{});
-
     return ins;
   }
 
   Frame3DScene& begin();
 
-  Frame3DScene& add_obj(std::shared_ptr<Hsu::Frame> frame);
+  Frame3DScene& set_arm_l_data(std::array<Types::HomogeneousM, 8> const& data);
+  Frame3DScene& set_arm_r_data(std::array<Types::HomogeneousM, 8> const& data);
 
   Frame3DScene& start();
 
