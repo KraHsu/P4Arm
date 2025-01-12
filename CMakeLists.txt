@@ -42,7 +42,7 @@ target_link_libraries(${CMAKE_PROJECT_NAME} Boost::system)
 # 查找库
 # 检查系统架构
 if(CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64")
-    set(LIB_PATH "${CMAKE_CURRENT_SOURCE_DIR}/lib/linux_x86_c++_v1.0.5")
+    set(LIB_PATH "${CMAKE_CURRENT_SOURCE_DIR}/lib/linux_x86_c++_v1.0.4")
 elseif(CMAKE_SYSTEM_PROCESSOR MATCHES "aarch64")
     set(LIB_PATH "${CMAKE_CURRENT_SOURCE_DIR}/lib/linux_arm64_c++_v1.0.4")
 else()
