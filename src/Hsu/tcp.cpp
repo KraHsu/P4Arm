@@ -87,7 +87,7 @@ void TCPConnection::close() {
   }
 }
 
-TCPConnection::~TCPConnection() { close(); }
+TCPConnection::~TCPConnection() { stop_server(); }
 
 void TCPConnection::accept_connections() {
   if (!running_) return;  // 检查服务器是否处于运行状态

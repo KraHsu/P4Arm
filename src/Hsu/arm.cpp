@@ -15,6 +15,101 @@
 GENERATE_LOGGER(arm)
 
 namespace Hsu {
+Arm::Frames::Frames() {
+  const double D = std::sqrt(2) / 2;
+  const double Angle90 = 3.14159265358979323846 / 2;
+  const auto World = Hsu::Frame::WORLD_FRAME();
+
+  Hsu::Types::TranslationM T;
+  Hsu::Types::RotationM RxN90;
+  Hsu::Types::RotationM Rx90;
+
+  RxN90.value.row(0) << 1, 0, 0;
+  RxN90.value.row(1) << 0, 0, 1;
+  RxN90.value.row(2) << 0, -1, 0;
+
+  Rx90.value.row(0) << 1, 0, 0;
+  Rx90.value.row(1) << 0, 0, -1;
+  Rx90.value.row(2) << 0, 1, 0;
+
+  links[0] = World->define_frame("BaseLink", {});
+
+  T.value << 0, 0, 0.2405;
+  links[1] = links[0]->define_frame("Link 1", {RxN90, T});
+
+  T.value << 0, 0, 0;
+  links[2] = links[1]->define_frame("Link 2", {Rx90, T});
+
+  T.value << 0, 0, 0.256;
+  links[3] = links[2]->define_frame("Link 3", {RxN90, T});
+
+  T.value << 0, 0, 0;
+  links[4] = links[3]->define_frame("Link 4", {Rx90, T});
+
+  T.value << 0, 0, 0.21;
+  links[5] = links[4]->define_frame("Link 5", {RxN90, T});
+
+  T.value << 0, 0, 0;
+  links[6] = links[5]->define_frame("Link 6", {Rx90, T});
+
+  T.value << 0, 0, 0.144;
+  links[7] = links[6]->define_frame("Link 7", {T});
+}
+
+std::array<Types::HomogeneousM, 8> Arm::Frames::get_data() {
+  auto& World = Frame::WORLD_FRAME();
+  for (int i = 0; i < 8; i++) {
+    data[i] = links[i]->get_homegeneous_relative_to(World);
+  }
+  return data;
+}
+
+Arm::Frames& Arm::Frames::set_base_offset(Types::HomogeneousM offset) {
+  links[0]->set_homegeneous(offset);
+  return *this;
+}
+
+Arm::Frames& Arm::Frames::set_joint_angle(uint32_t i, units::angle::radian_t rad) {
+  if (i < 1 or i > 7) {
+    throw std::runtime_error("关节应为 Joint 1-7");
+  }
+
+  double c = units::math::cos(rad);
+  double s = units::math::sin(rad);
+
+  Hsu::Types::RotationM R;
+
+  switch (i) {
+    case 1:
+    case 3:
+    case 5:
+      // Rz @ Rx(-90)
+      R.value.row(0) << +c, +0, -s;
+      R.value.row(1) << +s, +0, +c;
+      R.value.row(2) << +0, -1, +0;
+      break;
+    case 2:
+    case 4:
+    case 6:
+      // Rz @ Rx(90)
+      R.value.row(0) << +c, +0, +s;
+      R.value.row(1) << +s, +0, -c;
+      R.value.row(2) << +0, +1, +0;
+      break;
+    case 7:
+      // Rz
+      R.value.row(0) << +c, -s, +0;
+      R.value.row(1) << +s, +c, +0;
+      R.value.row(2) << +0, +0, +1;
+      break;
+  }
+
+  links[i]->set_rotation(R);
+  return *this;
+}
+}  // namespace Hsu
+
+namespace Hsu {
 Arm::Arm(std::string const& ip, int const& port) {
   auto& service = detail::service_ins();
   service.rm_set_log_call_back(detail::api_log, 3);
@@ -68,9 +163,9 @@ int Arm::move_common(const std::string& command, rm_position_t const& position,
 int Arm::move_jp(rm_position_t const& position, std::variant<rm_quat_t, rm_euler_t> const& posture, int v, int r,
                  int trajectory_connect, int block) {
   rm_position_t real_position;
-  real_position.x = position.x + offset_.x;
-  real_position.y = position.y + offset_.y;
-  real_position.z = position.z + offset_.z;
+  // real_position.x = position.x + offset_.x;
+  // real_position.y = position.y + offset_.y;
+  // real_position.z = position.z + offset_.z;
 
   Eigen::Vector3d end_pos(real_position.x, real_position.y, real_position.z);
   Eigen::Vector3d euler_angles;
@@ -80,10 +175,10 @@ int Arm::move_jp(rm_position_t const& position, std::variant<rm_quat_t, rm_euler
     euler_angles = Eigen::Vector3d(std::get<rm_euler_t>(posture).rx, std::get<rm_euler_t>(posture).ry,
                                    std::get<rm_euler_t>(posture).rz);
   }
-  Eigen::Vector3d real_pos = Hsu::compute_previous_joint_position(end_pos, euler_angles, hand_len_);
-  real_position.x = real_pos[0];
-  real_position.y = real_pos[1];
-  real_position.z = real_pos[2];
+  // Eigen::Vector3d real_pos = Hsu::compute_previous_joint_position(end_pos, euler_angles, hand_len_);
+  // real_position.x = real_pos[0];
+  // real_position.y = real_pos[1];
+  // real_position.z = real_pos[2];
 
   INFO("手腕的位置：[{}, {}, {}]", real_position.x, real_position.y, real_position.z);
 
@@ -95,9 +190,9 @@ int Arm::move_jp_force(rm_position_t const& position, std::variant<rm_quat_t, rm
   std::lock_guard<std::mutex> lock(mutex_);  // 加锁
   rm_pose_t pose;
 
-  pose.position.x = position.x + offset_.x;
-  pose.position.y = position.y + offset_.y;
-  pose.position.z = position.z + offset_.z;
+  // pose.position.x = position.x + offset_.x;
+  // pose.position.y = position.y + offset_.y;
+  // pose.position.z = position.z + offset_.z;
 
   if (std::holds_alternative<rm_quat_t>(posture)) {
     pose.quaternion = std::get<rm_quat_t>(posture);
@@ -146,18 +241,18 @@ rm_current_arm_state_t Arm::get_state() {
   auto res = detail::service_ins().rm_get_current_arm_state(handle_, &state);
   detail::throw_modbus_err("查询状态：", res);
 
-  state.pose.position.x -= offset_.x;
-  state.pose.position.y -= offset_.y;
-  state.pose.position.z -= offset_.z;
+  // state.pose.position.x -= offset_.x;
+  // state.pose.position.y -= offset_.y;
+  // state.pose.position.z -= offset_.z;
 
   Eigen::Vector3d end_pos(state.pose.position.x, state.pose.position.y, state.pose.position.z);
   Eigen::Vector3d euler_angles(state.pose.euler.rx, state.pose.euler.ry, state.pose.euler.rz);
 
-  Eigen::Vector3d real_pos = Hsu::compute_next_joint_position(end_pos, euler_angles, hand_len_);
+  // Eigen::Vector3d real_pos = Hsu::compute_next_joint_position(end_pos, euler_angles, hand_len_);
 
-  state.pose.position.x = real_pos[0];
-  state.pose.position.y = real_pos[1];
-  state.pose.position.z = real_pos[2];
+  // state.pose.position.x = real_pos[0];
+  // state.pose.position.y = real_pos[1];
+  // state.pose.position.z = real_pos[2];
 
   return state;
 }
@@ -191,11 +286,6 @@ void Arm::set_base_offset(Types::HomogeneousM offset) {
   return;
 }
 
-void Arm::set_offset(rm_position_t offset) {
-  std::lock_guard<std::mutex> lock(mutex_);
-  this->offset_ = offset;
-}
-
 int Arm::pause() {
   std::lock_guard<std::mutex> lock(mutex_);
   this->paused_ = true;
@@ -220,11 +310,6 @@ int Arm::stop() {
   std::lock_guard<std::mutex> lock(mutex_);
   this->stop_ = true;
   return detail::service_ins().rm_set_arm_pause(handle_);
-}
-
-void Arm::set_hand_len(double len) {
-  std::lock_guard<std::mutex> lock(mutex_);
-  this->hand_len_ = len;
 }
 
 namespace detail {
