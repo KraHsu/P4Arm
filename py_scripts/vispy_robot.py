@@ -7,8 +7,6 @@ import numpy as np
 from typing import cast, TYPE_CHECKING
 from scipy.spatial.transform import Rotation as R
 
-from PyQt5 import QtWidgets, QtCore
-
 from vispy import app
 from vispy.util.quaternion import Quaternion
 from vispy.app import use_app, Timer, Application
