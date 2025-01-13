@@ -15,3 +15,7 @@ CMakeUserPresets.json
 .cache
 build/*
 log/*
+
+Verify
+config.yaml
+py_scripts/__pycache__

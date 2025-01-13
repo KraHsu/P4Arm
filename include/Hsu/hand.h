@@ -6,6 +6,7 @@
 #include <memory>
 #include <mutex>
 #include <stdexcept>
+#include <string>
 #include <units.h>
 
 namespace Hsu::detail {
@@ -95,6 +96,8 @@ class Hand {
   Angles read_angles();
 
   void set_angles(Angles const& angles);
+
+  std::string read_err();
 
  public:
   enum class TactileType {

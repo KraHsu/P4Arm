@@ -188,15 +188,15 @@ std::vector<uint8_t> ModbusTCP::sendRequest(const std::vector<uint8_t>& request,
 }  // namespace Hsu
 namespace Hsu {
 std::weak_ptr<ModbusActor_TCP> ModbusTCP::produce_modbus_actor() {
-  // if (modbus_actor_.get()) {
-  //   ERROR("每个TCP只能生产一个Modbus接口");
-  // }
-  modbus_actor_ = std::shared_ptr<ModbusActor_TCP>(new ModbusActor_TCP(shared_from_this()));
+  if (modbus_actor_.get()) {
+    ERROR("每个TCP只能生产一个Modbus接口");
+  }
+  modbus_actor_ = std::make_shared<ModbusActor_TCP>(ModbusActor_TCP::Passkey{}, shared_from_this());
 
-  return std::weak_ptr(modbus_actor_);
+  return modbus_actor_;
 }
 
-ModbusActor_TCP::ModbusActor_TCP(std::weak_ptr<ModbusTCP> tcp) : tcp_{tcp} {}
+ModbusActor_TCP::ModbusActor_TCP(ModbusActor_TCP::Passkey, std::weak_ptr<ModbusTCP> tcp) : tcp_{tcp} {}
 
 int ModbusActor_TCP::read_holding_registers(int const& address) {
   throw std::runtime_error("未实现");

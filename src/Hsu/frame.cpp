@@ -1,3 +1,4 @@
+#include <Eigen/Dense>
 #include <Hsu/frame.h>
 #include <fmt/core.h>
 #include <fmt/ostream.h>
@@ -30,7 +31,7 @@ Eigen::MatrixXd pseudoInverse(const Eigen::MatrixXd& mat, double tol = 1e-9) {
   return svd.matrixV() * singularValuesInv * svd.matrixU().transpose();
 }
 
-// ---- Hsu::Types ----
+// ---- Hsu::Types RTH ----
 
 HomogeneousM::HomogeneousM() {
   value.setIdentity();
@@ -91,6 +92,27 @@ RotationM RotationM::operator*(RotationM const& R) {
   return RotationM(res);
 }
 
+Eigen::Vector3d RotationM::to_euler() {
+  Eigen::Vector3d eulerAngles;
+
+  auto const& R = value;
+
+  double sy = -R(2, 0);
+  double cy = std::sqrt(1 - sy * sy);
+
+  if (std::abs(cy) > 1e-6) {
+    eulerAngles[0] = std::atan2(R(2, 1), R(2, 2));
+    eulerAngles[1] = std::asin(sy);
+    eulerAngles[2] = std::atan2(R(1, 0), R(0, 0));
+  } else {
+    eulerAngles[0] = std::atan2(-R(1, 2), R(1, 1));
+    eulerAngles[1] = std::asin(sy);
+    eulerAngles[2] = 0;
+  }
+
+  return eulerAngles;
+}
+
 TranslationM::TranslationM() {
   value.setZero();
   return;
@@ -102,7 +124,7 @@ TranslationM::TranslationM(const HomogeneousM& homogeneous) {
   return;
 }
 
-// ---- Hsu ---- Frame ----
+// ---- Hsu Frame ----
 
 using Sprt = std::shared_ptr<Frame>;
 
@@ -128,6 +150,13 @@ Sprt Frame::set_rotation(Hsu::Types::RotationM const& rotation) {
 Sprt Frame::set_translation(Hsu::Types::TranslationM const& translation) {
   std::lock_guard<std::recursive_mutex> _{mu_};
   homogeneous_.value.block<3, 1>(0, 3) = translation.value;
+
+  return shared_from_this();
+}
+
+Sprt Frame::set_homegeneous(Hsu::Types::HomogeneousM const& homegeneous) {
+  std::lock_guard<std::recursive_mutex> _{mu_};
+  homogeneous_.value = homegeneous.value;
 
   return shared_from_this();
 }
@@ -170,8 +199,15 @@ Sprt Frame::transform(Hsu::Types::HomogeneousM const& H, Sprt target) {
   return shared_from_this();
 }
 
+// ---- Hsu::Types PVS ----
+
+// PointV::PointV(Eigen::Vector3d coordinate) : value(coordinate.head<3>()) {}
+
 // ---- VISUAL ----
 #if defined(HSU_FRAME_VISUAL)
+#include <pybind11/gil.h>
+#include <pybind11/pytypes.h>
+#include <pyconfig.h>
 std::string Hsu::get_current_executor_path() {
   const std::size_t MAXBUFSIZE = 2048;
   char buf[MAXBUFSIZE] = {'\0'};
@@ -196,6 +232,7 @@ Frame3DScene& Frame3DScene::begin() {
 
   main_ = new std::thread([&]() {
     pybind11::scoped_interpreter guard;
+
     pybind11::gil_scoped_acquire acquire;
 
     auto exec_dir = get_current_executor_path();
@@ -203,11 +240,22 @@ Frame3DScene& Frame3DScene::begin() {
     auto sys = pybind11::module::import("sys");
     sys.attr("path").attr("append")(exec_dir);
 
-    auto Core_ = pybind11::module::import("scripts.plot_controller");
-    auto Realtime3DScene = Core_.attr("Realtime3DScene");
-    auto plot = Realtime3DScene();
+    auto Core_ = pybind11::module::import("scripts.vispy_scene");
+    auto VispyScene = Core_.attr("VispyScene");
+    auto scene = VispyScene();
 
     auto Frame = Core_.attr("Frame");
+
+    pybind11::dict data;
+    pybind11::list list_l;
+    pybind11::list list_r;
+
+    for (int i = 0; i < 8; i++) {
+      list_l.append(pybind11::none{});
+      list_r.append(pybind11::none{});
+    }
+
+    pybind11::gil_scoped_release release;
 
     state_ = READY;
 
@@ -217,22 +265,28 @@ Frame3DScene& Frame3DScene::begin() {
 
     state_ = RUNNING;
 
-    pybind11::list objs;
-
     while (state_ == RUNNING and state_ != STOP) {
-      objs.clear();
-
       {
-        std::lock_guard<std::mutex> _{mu_};
-        for (auto& frame : frames_) {
-          objs.append(frame_c2p(Frame, frame));
+        pybind11::gil_scoped_acquire acquire;
+
+        for (int i = 0; i < 8; i++) {
+          list_l[i] = eigen_to_numpy(arm_left_[i].value);
+          list_r[i] = eigen_to_numpy(arm_right_[i].value);
         }
+
+        data["ArmL"] = list_l;
+        data["ArmR"] = list_r;
+
+        scene.attr("update")(data);
       }
 
-      plot.attr("update")(objs);
+      std::this_thread::sleep_for(std::chrono::milliseconds(15));
     }
 
-    plot.attr("close")();
+    {
+      pybind11::gil_scoped_acquire acquire;
+      scene.attr("close")();
+    }
   });
 
   while (state_ != READY) {
@@ -242,11 +296,23 @@ Frame3DScene& Frame3DScene::begin() {
   return *this;
 }
 
-Frame3DScene& Frame3DScene::add_obj(std::shared_ptr<Hsu::Frame> frame) {
-  std::lock_guard<std::mutex> _{mu_};
-  frames_.push_back(frame);
+Frame3DScene& Frame3DScene::set_arm_r_data(std::array<Types::HomogeneousM, 8> const& data) {
+  arm_right_ = data;
   return *this;
 }
+
+Frame3DScene& Frame3DScene::set_arm_l_data(std::array<Types::HomogeneousM, 8> const& data) {
+  arm_left_ = data;
+  return *this;
+}
+
+// Frame3DScene& Frame3DScene::set_data(std::string const& name, pybind11::object const& obj) {
+//   std::lock_guard<std::mutex> _{mu_};
+//   if (data_) {
+//     (*data_)[name.c_str()] = obj;
+//   }
+//   return *this;
+// }
 
 Frame3DScene& Frame3DScene::start() {
   if (state_ != READY) return *this;

@@ -52,14 +52,19 @@ class ModbusTCP : public std::enable_shared_from_this<ModbusTCP> {
 
 class ModbusActor_TCP : public ModbusActorBase {
  private:
-  std::weak_ptr<ModbusTCP> tcp_;
+  struct Passkey {
+    explicit Passkey() {}
+  };
 
-  ModbusActor_TCP(std::weak_ptr<ModbusTCP> tcp);
+  std::weak_ptr<ModbusTCP> tcp_;
 
   friend class ModbusTCP;
 
  public:
+  ModbusActor_TCP operator=(ModbusActor_TCP const&) = delete;
   ModbusActor_TCP(ModbusActor_TCP const&) = delete;
+
+  ModbusActor_TCP(Passkey, std::weak_ptr<ModbusTCP> tcp);
 
   int read_holding_registers(int const& address) override;
 

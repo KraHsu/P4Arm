@@ -10,11 +10,10 @@ set(CMAKE_C_STANDARD 11)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_STANDARD 17)
 
-
 set(CMAKE_PROJECT_NAME RM_Arm)
 
 # 设置源文件
-file(GLOB_RECURSE SOURCES
+file(GLOB_RECURSE SOURCES DEPENDS
     src/*.cpp
     src/Hsu/*.cpp
 )
@@ -40,10 +39,18 @@ target_link_libraries(${CMAKE_PROJECT_NAME} ${Boost_LIBRARIES} Eigen3::Eigen)
 # 添加 Boost 系统库的依赖
 target_link_libraries(${CMAKE_PROJECT_NAME} Boost::system)
 
+find_package(yaml-cpp REQUIRED)
+
+target_link_libraries(${CMAKE_PROJECT_NAME} yaml-cpp)
+
+find_package(nlohmann_json_schema_validator REQUIRED)
+
+target_link_libraries(${CMAKE_PROJECT_NAME} nlohmann_json_schema_validator)
+
 # 查找库
 # 检查系统架构
 if(CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64")
-    set(LIB_PATH "${CMAKE_CURRENT_SOURCE_DIR}/lib/linux_x86_c++_v1.0.5")
+    set(LIB_PATH "${CMAKE_CURRENT_SOURCE_DIR}/lib/linux_x86_c++_v1.0.4")
 elseif(CMAKE_SYSTEM_PROCESSOR MATCHES "aarch64")
     set(LIB_PATH "${CMAKE_CURRENT_SOURCE_DIR}/lib/linux_arm64_c++_v1.0.4")
 else()
@@ -126,11 +133,26 @@ if(USE_VISUAL)
     add_custom_target(copy_python ALL
         COMMAND ${CMAKE_COMMAND} -E copy_directory
         ${CMAKE_SOURCE_DIR}/py_scripts ${CMAKE_BINARY_DIR}/scripts
-        COMMENT "Copying Python scripts to build directory"
+        COMMENT "已复制Python脚本文件夹"
+    )
+
+    add_custom_target(copy_assets ALL
+        COMMAND ${CMAKE_COMMAND} -E copy_directory
+        ${CMAKE_SOURCE_DIR}/assets ${CMAKE_BINARY_DIR}/assets
+        COMMENT "已复制asset文件夹"
     )
 
     add_dependencies(${CMAKE_PROJECT_NAME}_with_visual copy_python)
+    add_dependencies(${CMAKE_PROJECT_NAME}_with_visual copy_assets)
 endif()
+
+add_custom_target(copy_config ALL
+    COMMAND ${CMAKE_COMMAND} -E copy 
+    ${CMAKE_SOURCE_DIR}/config.yaml ${CMAKE_BINARY_DIR}/config.yaml
+    COMMENT "已复制配置文件"
+)
+
+add_dependencies(${CMAKE_PROJECT_NAME} copy_assets)
 
 # 启用详细输出
 set(CMAKE_VERBOSE_MAKEFILE ON)

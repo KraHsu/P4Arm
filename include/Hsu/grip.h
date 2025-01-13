@@ -1,5 +1,7 @@
 #pragma once
 
+#error "GIRP 在当前版本 夹爪已弃用"
+
 #include <RMArm/rm_define.h>
 #include <RMArm/rm_service.h>
 #include <nlohmann/json.hpp>
