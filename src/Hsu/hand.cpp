@@ -134,6 +134,22 @@ void Hand::set_angles(const Angles& angles) {
   }
 }
 
+std::string Hand::read_err() {
+  try {
+    std::lock_guard<std::mutex> lock(mutex_);
+
+    if (auto ma = modbus_actor_.lock()) {
+      auto res = ma->read_multiple_holding_registers(1606, 3);
+
+      return fmt::format("{}", fmt::join(res, ", "));
+    } else {
+      throw std::runtime_error("接口已失效！");
+    }
+  } catch (std::exception& e) {
+    ERROR("写入手指角度失败：{}", e.what());
+  }
+}
+
 void Hand::read_tactile_error(const std::exception& e) const {
   ERROR("读取触觉信息失败：{}", e.what());
   return;

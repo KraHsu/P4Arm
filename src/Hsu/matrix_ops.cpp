@@ -1,3 +1,4 @@
+#include "units.h"
 #include <Hsu/matrix_ops.h>
 #include <algorithm>
 #include <array>
@@ -92,5 +93,29 @@ bool is_intersecting_parallelepiped(const std::vector<Vector3d>& vertices,
   }
 
   return false;
+}
+
+Eigen::Matrix3d get_Rx(units::angle::radian_t angle) {
+  Eigen::Matrix3d Rx;
+  double cosA = units::math::cos(angle);
+  double sinA = units::math::sin(angle);
+  Rx << 1, 0, 0, 0, cosA, -sinA, 0, sinA, cosA;
+  return Rx;
+}
+
+Eigen::Matrix3d get_Ry(units::angle::radian_t angle) {
+  Eigen::Matrix3d Ry;
+  double cosA = units::math::cos(angle);
+  double sinA = units::math::sin(angle);
+  Ry << cosA, 0, sinA, 0, 1, 0, -sinA, 0, cosA;
+  return Ry;
+}
+
+Eigen::Matrix3d get_Rz(units::angle::radian_t angle) {
+  Eigen::Matrix3d Rz;
+  double cosA = units::math::cos(angle);
+  double sinA = units::math::sin(angle);
+  Rz << cosA, -sinA, 0, sinA, cosA, 0, 0, 0, 1;
+  return Rz;
 }
 }  // namespace Hsu

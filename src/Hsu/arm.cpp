@@ -1,4 +1,5 @@
 // ---- Hsu ----
+#include "Hsu/frame.h"
 #include "units.h"
 #include <Hsu/arm.h>
 #include <Hsu/hsu_module_log.h>
@@ -7,12 +8,15 @@
 // ---- stdandard ----
 #include <memory>
 #include <stdexcept>
+#include <string>
 #include <sys/socket.h>
 // ---- third ----
 #include <bits/stdint-intn.h>
 #include <fmt/format.h>
 
 GENERATE_LOGGER(arm)
+
+using namespace units::literals;
 
 namespace Hsu {
 Arm::Frames::Frames() {
@@ -64,7 +68,7 @@ std::array<Types::HomogeneousM, 8> Arm::Frames::get_data() {
   return data;
 }
 
-Arm::Frames& Arm::Frames::set_base_offset(Types::HomogeneousM offset) {
+Arm::Frames& Arm::Frames::set_base_offset(Types::HomogeneousM const& offset) {
   links[0]->set_homegeneous(offset);
   return *this;
 }
@@ -110,7 +114,7 @@ Arm::Frames& Arm::Frames::set_joint_angle(uint32_t i, units::angle::radian_t rad
 }  // namespace Hsu
 
 namespace Hsu {
-Arm::Arm(std::string const& ip, int const& port) {
+Arm::Arm(std::string const& ip, int const& port) : frame_() {
   auto& service = detail::service_ins();
   service.rm_set_log_call_back(detail::api_log, 3);
   handle_ = service.rm_create_robot_arm(ip.c_str(), port);
@@ -119,6 +123,9 @@ Arm::Arm(std::string const& ip, int const& port) {
   } else {
     INFO("[{}]号机械臂连接成功", handle_->id);
   }
+
+  base_ = Hsu::Frame::WORLD_FRAME()->define_frame("Base", {});
+  actor_ = frame_.links[7]->define_frame("Actor", {});
 }
 
 Arm::~Arm() {
@@ -126,6 +133,8 @@ Arm::~Arm() {
   detail::service_ins().rm_delete_robot_arm(handle_);
   return;
 }
+
+int Arm::move_jp(rm_pose_t pose, int v) noexcept { return detail::service_ins().rm_movej_p(handle_, pose, v, 0, 0, 0); }
 
 int Arm::move_common(const std::string& command, rm_position_t const& position,
                      std::variant<rm_quat_t, rm_euler_t> const& posture, int v, int r, int trajectory_connect,
@@ -259,7 +268,6 @@ rm_current_arm_state_t Arm::get_state() {
 
 std::array<units::angle::radian_t, 7> Arm::read_joint_angle() {
   std::lock_guard<std::mutex> lock(mutex_);
-  rm_current_arm_state_t state;
 
   float tmp[7];
   std::array<units::angle::radian_t, 7> result;
@@ -275,15 +283,127 @@ std::array<units::angle::radian_t, 7> Arm::read_joint_angle() {
   return result;
 }
 
+Arm::Posture::Posture(std::array<units::length::meter_t, 3> position, std::array<units::angle::radian_t, 3> euler)
+    : Position(position), Euler(euler) {}
+
+Arm::Posture::Posture(units::length::meter_t x, units::length::meter_t y, units::length::meter_t z,
+                      units::angle::radian_t rx, units::angle::radian_t ry, units::angle::radian_t rz)
+    : Position{x, y, z}, Euler{rx, ry, rz} {}
+
+Types::HomogeneousM Arm::Posture::to_homogeneous() {
+  auto const& [x, y, z] = Position;
+  auto const& [rx, ry, rz] = Euler;
+  Types::RotationM R;
+  R.value = Hsu::get_Rz(rz) * Hsu::get_Ry(ry) * Hsu::get_Rx(rx);
+  Types::TranslationM T;
+  T.value << x(), y(), z();
+  return {R, T};
+}
+
+Arm::Posture Arm::read_posture(std::string const& actor, std::string const& frame) {
+  std::lock_guard<std::mutex> lock(mutex_);
+  rm_current_arm_state_t state;
+
+  auto res = detail::service_ins().rm_get_current_arm_state(handle_, &state);
+  detail::throw_modbus_err("查询状态：", res);
+
+  for (int i = 0; i < 7; i++) {
+    frame_.set_joint_angle(i + 1, state.joint[i] * 1_deg);
+  }
+
+  std::shared_ptr<Hsu::Frame> Actor, Frame;
+
+  if (actor == "Actor") {
+    Actor = actor_;
+  } else if (actor == "Wrist") {
+    Actor = frame_.links[7];
+  } else {
+    ERROR(R"(可选 Actor 仅支持 "Actor" "Wrist")");
+  }
+
+  if (frame == "World") {
+    Frame = Hsu::Frame::WORLD_FRAME();
+  } else if (frame == "Base") {
+    Frame = base_;
+  } else {
+    ERROR(R"(可选 Frame 仅支持 "World" "Base")");
+  }
+
+  auto&& Ha_f = Actor->get_homegeneous_relative_to(Frame);
+
+  auto const& x = Ha_f.value(0, 3);
+  auto const& y = Ha_f.value(1, 3);
+  auto const& z = Ha_f.value(2, 3);
+
+  auto&& euler = Types::RotationM(Ha_f).to_euler();
+
+  auto const& rx = euler[0];
+  auto const& ry = euler[1];
+  auto const& rz = euler[2];
+
+  return {{x * 1_m, y * 1_m, z * 1_m}, {rx * 1_rad, ry * 1_rad, rz * 1_rad}};
+}
+
 std::array<Types::HomogeneousM, 8> Arm::get_frames_data() {
   read_joint_angle();
 
   return frame_.get_data();
 }
 
-void Arm::set_base_offset(Types::HomogeneousM offset) {
+void Arm::set_base_offset(Types::HomogeneousM const& offset) {
+  base_->set_translation(offset);
   frame_.set_base_offset(offset);
   return;
+}
+
+void Arm::set_actor_offset(Types::HomogeneousM const& offset) {
+  actor_ = frame_.links[7]->define_frame("Actor", offset);
+  return;
+}
+
+void Arm::move(Arm::Posture posture, int v, std::string const& actor, std::string const& frame) {
+  rm_pose_t pose;
+
+  std::shared_ptr<Hsu::Frame> Actor, Frame;
+  auto const& World = Hsu::Frame::WORLD_FRAME();
+  auto const& Wrist = frame_.links[7];
+
+  if (actor == "Actor") {
+    Actor = actor_;
+  } else if (actor == "Wrist") {
+    Actor = frame_.links[7];
+  } else {
+    ERROR(R"(可选 Actor 仅支持 "Actor" "Wrist")");
+  }
+
+  if (frame == "World") {
+    Frame = Hsu::Frame::WORLD_FRAME();
+  } else if (frame == "Base") {
+    Frame = base_;
+  } else {
+    ERROR(R"(可选 Frame 仅支持 "World" "Base")");
+  }
+
+  auto&& Hf_b = Frame->get_homegeneous_relative_to(base_);
+  auto&& Ha_f = posture.to_homogeneous();
+  auto&& Hw_a = Actor->get_homegeneous_relative_to(Wrist).inv();
+
+  auto&& Hw_b = Hf_b * Ha_f * Hw_a;
+
+  Types::RotationM R(Hw_b);
+
+  auto euler = R.to_euler();
+
+  pose.position.x = Hw_b.value(0, 3);
+  pose.position.y = Hw_b.value(1, 3);
+  pose.position.z = Hw_b.value(2, 3);
+
+  pose.euler.rx = euler[0];
+  pose.euler.ry = euler[1];
+  pose.euler.rz = euler[2];
+
+  // TODO: 错误处理
+  move_jp(pose, v);
 }
 
 int Arm::pause() {

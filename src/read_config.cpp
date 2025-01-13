@@ -81,18 +81,18 @@ std::pair<std::string, int> parse_ip_port(const std::string& input) {
 }
 
 json get_default_config() {
-  return R"({"Actor":{"ArmL":"Hand","ArmR":"Hand","OffsetL":{"Position":[0,0,0],"Eular":[0,0,0]},"OffsetR":{"Position")"
-         R"(:[0,0,0],"Eular":[0,0,0]}},"Address":{"ArmL":"192.168.1.18:8080","ArmR":"192.168.2.18:8080","HandL":"192.1)"
+  return R"({"Actor":{"ArmL":"Hand","ArmR":"Hand","OffsetL":{"Position":[0,0,0],"Euler":[0,0,0]},"OffsetR":{"Position")"
+         R"(:[0,0,0],"Euler":[0,0,0]}},"Address":{"ArmL":"192.168.1.18:8080","ArmR":"192.168.2.18:8080","HandL":"192.1)"
          R"(68.12.210:6000","HandR":"192.168.11.210:6000"},"Speed":10})"_json;
 }
 
 json get_config_schema() {
   return R"({"type":"object","properties":{"Actor":{"type":"object","properties":{"ArmL":{"type":"string","enum":["Han)"
          R"(d","Grip"]},"ArmR":{"type":"string","enum":["Hand","Grip"]},"OffsetL":{"type":"object","properties":{"Posi)"
-         R"(tion":{"type":"array","items":{"type":"number"},"minItems":3,"maxItems":3},"Eular":{"type":"array","items")"
-         R"(:{"type":"number"},"minItems":3,"maxItems":3}},"required":["Position","Eular"]},"OffsetR":{"type":"object")"
-         R"(,"properties":{"Position":{"type":"array","items":{"type":"number"},"minItems":3,"maxItems":3},"Eular":{"t)"
-         R"(ype":"array","items":{"type":"number"},"minItems":3,"maxItems":3}},"required":["Position","Eular"]}},"requ)"
+         R"(tion":{"type":"array","items":{"type":"number"},"minItems":3,"maxItems":3},"Euler":{"type":"array","items")"
+         R"(:{"type":"number"},"minItems":3,"maxItems":3}},"required":["Position","Euler"]},"OffsetR":{"type":"object")"
+         R"(,"properties":{"Position":{"type":"array","items":{"type":"number"},"minItems":3,"maxItems":3},"Euler":{"t)"
+         R"(ype":"array","items":{"type":"number"},"minItems":3,"maxItems":3}},"required":["Position","Euler"]}},"requ)"
          R"(ired":["ArmL","ArmR","OffsetL","OffsetR"]},"Address":{"type":"object","properties":{"ArmL":{"type":"string)"
          R"("},"ArmR":{"type":"string"},"HandL":{"type":"string"},"HandR":{"type":"string"}},"required":["ArmL","ArmR")"
          R"(]},"Speed":{"type":"integer","minimum":1,"maximum":100}},"required":["Actor","Address","Speed"]})"_json;

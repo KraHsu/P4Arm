@@ -17,6 +17,7 @@
 #include <memory>
 #include <mutex>
 #include <stdexcept>
+#include <string>
 #include <variant>
 
 namespace Hsu {
@@ -79,15 +80,19 @@ class Arm : public std::enable_shared_from_this<Arm> {
 
     std::array<Types::HomogeneousM, 8> get_data();
 
-    Frames& set_base_offset(Types::HomogeneousM offset);
+    Frames& set_base_offset(Types::HomogeneousM const& offset);
 
     Frames& set_joint_angle(uint32_t i, units::angle::radian_t rad);
   };
 
   Frames const& read_frames() { return frame_; }
 
- private:
-  Frames frame_{};
+ public:
+  Frames frame_;
+
+  std::shared_ptr<Frame> base_;
+
+  std::shared_ptr<Frame> actor_;
 
   // ----
 
@@ -96,14 +101,19 @@ class Arm : public std::enable_shared_from_this<Arm> {
 
   ~Arm();
 
-  int move_common(const std::string& command, rm_position_t const& position,
-                  std::variant<rm_quat_t, rm_euler_t> const& posture, int v, int r, int trajectory_connect, int block);
+  int move_jp(rm_pose_t pose, int v) noexcept;
 
-  int move_jp(rm_position_t const& position, std::variant<rm_quat_t, rm_euler_t> const& posture, int v, int r = 0,
-              int trajectory_connect = 0, int block = 0);
+  [[deprecated("暂时弃用")]] int move_common(const std::string& command, rm_position_t const& position,
+                                             std::variant<rm_quat_t, rm_euler_t> const& posture, int v, int r,
+                                             int trajectory_connect, int block);
 
-  int move_jp_force(rm_position_t const& position, std::variant<rm_quat_t, rm_euler_t> const& posture, int v, int r = 0,
-                    int trajectory_connect = 0, int block = 0);
+  [[deprecated("暂时弃用")]] int move_jp(rm_position_t const& position,
+                                         std::variant<rm_quat_t, rm_euler_t> const& posture, int v, int r = 0,
+                                         int trajectory_connect = 0, int block = 0);
+
+  [[deprecated("暂时弃用")]] int move_jp_force(rm_position_t const& position,
+                                               std::variant<rm_quat_t, rm_euler_t> const& posture, int v, int r = 0,
+                                               int trajectory_connect = 0, int block = 0);
 
   [[deprecated("暂时弃用")]] int move_l(rm_position_t const& position,
                                         std::variant<rm_quat_t, rm_euler_t> const& posture, int v, int r = 0,
@@ -132,15 +142,30 @@ class Arm : public std::enable_shared_from_this<Arm> {
 
   int stop();
 
-  std::array<units::angle::radian_t, 3> read_euler();
+ public:
+  struct Posture {
+    std::array<units::length::meter_t, 3> Position;
+    std::array<units::angle::radian_t, 3> Euler;
 
-  std::array<units::length::meter_t, 3> read_position();
+    Posture(std::array<units::length::meter_t, 3> position, std::array<units::angle::radian_t, 3> euler);
+
+    Posture(units::length::meter_t x, units::length::meter_t y, units::length::meter_t z, units::angle::radian_t rx,
+            units::angle::radian_t ry, units::angle::radian_t rz);
+
+    Types::HomogeneousM to_homogeneous();
+  };
+
+  Posture read_posture(std::string const& actor, std::string const& frame);
 
   std::array<units::angle::radian_t, 7> read_joint_angle();
 
   std::array<Types::HomogeneousM, 8> get_frames_data();
 
-  void set_base_offset(Types::HomogeneousM offset);
+  void set_base_offset(Types::HomogeneousM const& offset);
+
+  void set_actor_offset(Types::HomogeneousM const& offset);
+
+  void move(Posture posture, int v, std::string const& actor, std::string const& frame);
 
  private:
   rm_robot_handle* handle_{nullptr};

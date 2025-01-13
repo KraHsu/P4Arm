@@ -45,6 +45,8 @@ struct RotationM {
   RotationM inv();
 
   RotationM operator*(RotationM const& R);
+
+  Eigen::Vector3d to_euler();
 };
 
 struct TranslationM {

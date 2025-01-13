@@ -9,6 +9,7 @@
 #include <RMArm/rm_define.h>
 #include <RMArm/rm_service.h>
 // ---- standard ----
+#include <array>
 #include <chrono>
 #include <cmath>
 #include <cstdlib>
@@ -209,6 +210,8 @@ void collision_detection_thread(std::shared_ptr<Hsu::Arm> arm, rm_position_t pos
 
 int main() {
   // ---- 初始化 ----
+  std::signal(SIGINT, signalHandler);
+
   set_up_main_logger();
   // ---- 全局对象 ----
 
@@ -257,7 +260,7 @@ int main() {
       } else {
         auto const& [ip, port] = parse_ip_port(config["Address"]["HandR"]);
         right_hand_tcp = std::make_shared<Hsu::ModbusTCP>(ip, port);
-        right_hand = std::make_shared<Hsu::Hand>(left_hand_tcp->produce_modbus_actor());
+        right_hand = std::make_shared<Hsu::Hand>(right_hand_tcp->produce_modbus_actor());
       }
     } else {
       // TODO: 实现夹爪
@@ -267,6 +270,50 @@ int main() {
     {
       auto const& [ip, port] = parse_ip_port(config["Address"]["Server"]);
       tcp_server = std::make_shared<Hsu::TCPConnection>(ip, port);
+    }
+
+    {
+      Hsu::Types::RotationM R;
+      Hsu::Types::TranslationM T;
+      double d = std::sqrt(2) / 2;
+
+      R.value.row(0) << +0, +1, +0;
+      R.value.row(1) << +d, +0, +d;
+      R.value.row(2) << +d, +0, -d;
+      T.value << 0, 0.211, 0;
+
+      left_arm->set_base_offset({R, T});
+
+      R.value.row(0) << +0, -1, +0;
+      R.value.row(1) << -d, +0, -d;
+      R.value.row(2) << +d, +0, -d;
+      T.value << 0, -0.211, 0;
+
+      right_arm->set_base_offset({R, T});
+    }
+
+    {
+      auto const& [x, y, z] = config["Actor"]["OffsetL"]["Position"].get<std::array<double, 3>>();
+      auto const& [rx, ry, rz] = config["Actor"]["OffsetL"]["Euler"].get<std::array<double, 3>>();
+
+      Hsu::Types::RotationM R;
+      R.value = Hsu::get_Rz(rz * 1_rad) * Hsu::get_Ry(ry * 1_rad) * Hsu::get_Rx(rx * 1_rad);
+      Hsu::Types::TranslationM T;
+      T.value << x, y, z;
+
+      left_arm->set_actor_offset({R, T});
+    }
+
+    {
+      auto const& [x, y, z] = config["Actor"]["OffsetR"]["Position"].get<std::array<double, 3>>();
+      auto const& [rx, ry, rz] = config["Actor"]["OffsetR"]["Euler"].get<std::array<double, 3>>();
+
+      Hsu::Types::RotationM R;
+      R.value = Hsu::get_Rz(rz * 1_rad) * Hsu::get_Ry(ry * 1_rad) * Hsu::get_Rx(rx * 1_rad);
+      Hsu::Types::TranslationM T;
+      T.value << x, y, z;
+
+      right_arm->set_actor_offset({R, T});
     }
 
   } catch (std::exception const& e) {
@@ -280,8 +327,18 @@ int main() {
     Hsu::Hand::Angles open_angles(176_deg, 176_deg, 176_deg, 176_deg, 70_deg, 120_deg);
     Hsu::Hand::Angles close_angles(20_deg, 20_deg, 20_deg, 20_deg, 50_deg, 90_deg);
 
+    left_hand->clear_err();
+    right_hand->clear_err();
+
+    auto angles = right_hand->read_angles();
+
+    WARN("{} {} {} {} {} {}", angles.index(), angles.little(), angles.middle(), angles.ring(), angles.thumb(),
+         angles.thumb_r());
+
     left_hand->set_angles(close_angles);
     right_hand->set_angles(close_angles);
+
+    angles = right_hand->read_angles();
 
     sleep_s(2);
 
@@ -289,52 +346,65 @@ int main() {
     right_hand->set_angles(open_angles);
 
     tcp_server->start_server();
+
   } catch (std::exception const& e) {
     ERROR(e.what());
   }
 
 #if defined(HSU_FRAME_VISUAL)
-  try {
-    auto& sc = Hsu::Frame3DScene::instance();
+  auto x = std::thread([&]() {
+    try {
+      auto& sc = Hsu::Frame3DScene::instance();
 
-    sc.begin();
+      sc.begin();
 
-    sc.start();
+      sc.start();
 
-    std::this_thread::sleep_for(std::chrono::seconds(1));
+      std::this_thread::sleep_for(std::chrono::seconds(1));
 
-    Hsu::Types::RotationM R;
-    Hsu::Types::TranslationM T;
-    double d = std::sqrt(2) / 2;
+      WHILE_RUNNING {
+        sc.set_arm_l_data(left_arm->get_frames_data());
+        sc.set_arm_r_data(right_arm->get_frames_data());
 
-    R.value.row(0) << +0, +1, +0;
-    R.value.row(1) << +d, +0, +d;
-    R.value.row(2) << +d, +0, -d;
-    T.value << 0, 0.209, 0;
+        sleep_ms(30);
+      }
 
-    left_arm->set_base_offset({R, T});
-
-    R.value.row(0) << +0, -1, +0;
-    R.value.row(1) << -d, +0, -d;
-    R.value.row(2) << +d, +0, -d;
-    T.value << 0, -0.209, 0;
-
-    right_arm->set_base_offset({R, T});
-
-    WHILE_RUNNING {
-      sc.set_arm_l_data(left_arm->get_frames_data());
-      sc.set_arm_r_data(right_arm->get_frames_data());
-
-      sleep_ms(30);
+      sc.stop();
+    } catch (const pybind11::error_already_set& e) {
+      std::cerr << "Main Error: " << e.what() << std::endl;
     }
+  });
 
-    sc.stop();
-  } catch (const pybind11::error_already_set& e) {
-    std::cerr << "Main Error: " << e.what() << std::endl;
-  }
-#else
-  WHILE_RUNNING { sleep_ms(100); }
+  sleep_s(4);
+
+  INFO("可视化已启动");
 #endif
+
+  {
+    Hsu::Arm::Posture pose(0.35_m, 0_m, 0.2_m, 0_deg, 0_deg, 0_deg);
+    left_arm->move(pose, 2, "Wrist", "Base");
+
+    right_arm->move(pose, 2, "Wrist", "Base");
+  }
+
+  {
+    auto&& pose = left_arm->read_posture("Actor", "World");
+    auto const& [x, y, z] = pose.Position;
+    auto const& [rx, ry, rz] = pose.Euler;
+    INFO("Actor in World: {}, {}, {}, {}, {}, {}", x(), y(), z(), rx(), ry(), rz());
+  }
+
+  {
+    auto&& pose = left_arm->read_posture("Wrist", "World");
+    auto const& [x, y, z] = pose.Position;
+    auto const& [rx, ry, rz] = pose.Euler;
+    INFO("Wrist in World: {}, {}, {}, {}, {}, {}", x(), y(), z(), rx(), ry(), rz());
+  }
+
+  WHILE_RUNNING { sleep_ms(100); }
+
+  sleep_s(1);
+
   INFO("主程序已停止");
 
   return 0;

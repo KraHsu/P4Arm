@@ -92,6 +92,27 @@ RotationM RotationM::operator*(RotationM const& R) {
   return RotationM(res);
 }
 
+Eigen::Vector3d RotationM::to_euler() {
+  Eigen::Vector3d eulerAngles;
+
+  auto const& R = value;
+
+  double sy = -R(2, 0);
+  double cy = std::sqrt(1 - sy * sy);
+
+  if (std::abs(cy) > 1e-6) {
+    eulerAngles[0] = std::atan2(R(2, 1), R(2, 2));
+    eulerAngles[1] = std::asin(sy);
+    eulerAngles[2] = std::atan2(R(1, 0), R(0, 0));
+  } else {
+    eulerAngles[0] = std::atan2(-R(1, 2), R(1, 1));
+    eulerAngles[1] = std::asin(sy);
+    eulerAngles[2] = 0;
+  }
+
+  return eulerAngles;
+}
+
 TranslationM::TranslationM() {
   value.setZero();
   return;
@@ -263,7 +284,6 @@ Frame3DScene& Frame3DScene::begin() {
     }
 
     {
-      std::cout << "close" << std::endl;
       pybind11::gil_scoped_acquire acquire;
       scene.attr("close")();
     }

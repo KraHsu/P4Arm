@@ -1,6 +1,7 @@
 import sys
 import copy
 import time
+import signal
 from threading import Thread, Event
 
 import numpy as np
@@ -40,7 +41,7 @@ if TYPE_CHECKING:
     from vispy.scene import Widget
     from vispy.visuals import BoxVisual, MeshVisual
 
-CANVAS_SIZE = (800, 600)
+CANVAS_SIZE = (1280, 720)
 
 
 class XYZAxisCustomVisual(LineVisual):
@@ -110,7 +111,7 @@ class VispyScene:
     def __init__(self):
         self.thread_initialized = Event()
 
-        self.thread = Thread(target=self._run)
+        self.thread = Thread(target=self._run, daemon=True)
         self.thread.start()
 
         self.thread_initialized.wait()
@@ -132,6 +133,12 @@ class VispyScene:
             self.views[i].add(self.right_camera[i])
             self.views[i].add(self.head_camera[i])
 
+        self.wrist_l = XYZAxisCustom()
+        self.wrist_r = XYZAxisCustom()
+        self.wrists = [self.wrist_l, self.wrist_r]
+        for wrist in self.wrists:
+            self.view_free.add(wrist)
+
     def _run(self):
         app.use_app("Glfw")
         self.canvas = SceneCanvas(
@@ -140,7 +147,7 @@ class VispyScene:
 
         self.grid = self.canvas.central_widget.add_grid()
 
-        self.canvas.measure_fps()
+        # self.canvas.measure_fps()
 
         self.view_free = ViewBox(border_color="white", parent=self.canvas.scene)
         self.view_free.bgcolor = "#efefef"
@@ -148,23 +155,17 @@ class VispyScene:
 
         self.view_head = ViewBox(border_color="blue", parent=self.canvas.scene)
         self.view_head.bgcolor = "#efefef"
-        self.view_head.camera = FlyCamera(
-            fov=60, interactive=False, flip=(True, True, True)
-        )
+        self.view_head.camera = FlyCamera(fov=45, interactive=False)
         self.view_head.camera.auto_roll = False
 
         self.view_left_hand = ViewBox(border_color="green", parent=self.canvas.scene)
         self.view_left_hand.bgcolor = "#efefef"
-        self.view_left_hand.camera = FlyCamera(
-            fov=60, interactive=False, flip=(True, True, True)
-        )
+        self.view_left_hand.camera = FlyCamera(fov=45, interactive=False)
         self.view_left_hand.camera.auto_roll = False
 
         self.view_right_hand = ViewBox(border_color="yellow", parent=self.canvas.scene)
         self.view_right_hand.bgcolor = "#efefef"
-        self.view_right_hand.camera = FlyCamera(
-            fov=60, interactive=False, flip=(True, True, True)
-        )
+        self.view_right_hand.camera = FlyCamera(fov=45, interactive=False)
         self.view_right_hand.camera.auto_roll = False
 
         self.grid.padding = 6
@@ -184,9 +185,12 @@ class VispyScene:
 
         self.thread_initialized.set()
 
-        self.jb = 0
+        self.RxPi = np.array([[1, 0, 0], [0, -1, 0], [0, 0, -1]])
 
-        app.run()
+        try:
+            app.run()
+        except KeyboardInterrupt:
+            print("\n捕获到 Ctrl+C，程序退出。")
 
     def update(self, data: dict):
         RC = np.array(
@@ -213,15 +217,19 @@ class VispyScene:
             ]
         )
 
-        q = matrix_to_quaternion(RC.T[:3, :3])
+        q = matrix_to_quaternion((RC[:3, :3] @ self.RxPi).T)
 
         ch = self.view_head.camera
         ch.center = RC[:3, 3]
         ch.rotation1 = q
         ch.view_changed()
 
+        # H = np.array([[1, 0, 0], [0, -1, 0], [0, 0, -1]])
+        # RC[:3, :3] = RC[:3, :3] @ H
         for i in self.head_camera:
             i.update_data(RC)
+
+        # RC =
 
         # ---- right hand ----
 
@@ -252,7 +260,7 @@ class VispyScene:
         )
 
         RC = Rw @ RC_w
-        q: Quaternion = matrix_to_quaternion(RC.T[:3, :3])
+        q: Quaternion = matrix_to_quaternion((RC[:3, :3] @ self.RxPi).T)
 
         for i in self.right_camera:
             i.update_data(RC)
@@ -291,13 +299,17 @@ class VispyScene:
 
         RC = Rw @ RC_w
 
-        q: Quaternion = matrix_to_quaternion(RC.T[:3, :3])
+        q: Quaternion = matrix_to_quaternion((RC[:3, :3] @ self.RxPi).T)
 
         for i in self.left_camera:
             i.update_data(RC)
         cl.center = RC[:3, 3]
         cl.rotation1 = q
         cl.view_changed()
+
+        wrist_l, wrist_r = self.wrists
+        wrist_l.update_data(data["ArmL"][7])
+        wrist_r.update_data(data["ArmR"][7])
 
         for i in range(4):
             if "ArmL" in data:
@@ -306,9 +318,7 @@ class VispyScene:
                 self.arm_r[i].update(data["ArmR"])
 
     def close(self):
-        print("close")
         app.quit()
-        print("quit")
 
 
 def main():
@@ -446,6 +456,8 @@ def main():
     # time.sleep(5)
 
 
+# signal.signal(signal.SIGINT, signal.SIG_DFL)
+
 if __name__ == "__main__" and sys.flags.interactive == 0:
     sc = VispyScene()
 
@@ -463,5 +475,8 @@ if __name__ == "__main__" and sys.flags.interactive == 0:
         data["ArmR"] = matrices.copy()
 
         sc.update(data=data)
+
+        print(i)
+        time.sleep(1)
 
     sc.close()
