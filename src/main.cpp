@@ -1,4 +1,5 @@
 // ---- Hsu ----
+#include "units.h"
 #include <Hsu/arm.h>
 #include <Hsu/frame.h>
 #include <Hsu/hand.h>
@@ -330,20 +331,27 @@ int main() {
     left_hand->clear_err();
     right_hand->clear_err();
 
-    auto angles = right_hand->read_angles();
-
-    WARN("{} {} {} {} {} {}", angles.index(), angles.little(), angles.middle(), angles.ring(), angles.thumb(),
-         angles.thumb_r());
-
     left_hand->set_angles(close_angles);
     right_hand->set_angles(close_angles);
-
-    angles = right_hand->read_angles();
 
     sleep_s(2);
 
     left_hand->set_angles(open_angles);
     right_hand->set_angles(open_angles);
+
+    tcp_server->connect("ArmL", [&left_arm](int code, const json& payload) -> Hsu::TCPConnection::Response {
+      return handle_arm(left_arm, code, payload);
+    });
+    tcp_server->connect("ArmR", [&right_arm](int code, const json& payload) -> Hsu::TCPConnection::Response {
+      return handle_arm(right_arm, code, payload);
+    });
+
+    tcp_server->connect("HandL", [&left_hand](int code, const json& payload) -> Hsu::TCPConnection::Response {
+      return handle_hand(left_hand, code, payload);
+    });
+    tcp_server->connect("HandR", [&right_hand](int code, const json& payload) -> Hsu::TCPConnection::Response {
+      return handle_hand(right_hand, code, payload);
+    });
 
     tcp_server->start_server();
 
@@ -352,7 +360,7 @@ int main() {
   }
 
 #if defined(HSU_FRAME_VISUAL)
-  auto x = std::thread([&]() {
+  auto __x = std::thread([&]() {
     try {
       auto& sc = Hsu::Frame3DScene::instance();
 
@@ -385,20 +393,6 @@ int main() {
     left_arm->move(pose, 2, "Wrist", "Base");
 
     right_arm->move(pose, 2, "Wrist", "Base");
-  }
-
-  {
-    auto&& pose = left_arm->read_posture("Actor", "World");
-    auto const& [x, y, z] = pose.Position;
-    auto const& [rx, ry, rz] = pose.Euler;
-    INFO("Actor in World: {}, {}, {}, {}, {}, {}", x(), y(), z(), rx(), ry(), rz());
-  }
-
-  {
-    auto&& pose = left_arm->read_posture("Wrist", "World");
-    auto const& [x, y, z] = pose.Position;
-    auto const& [rx, ry, rz] = pose.Euler;
-    INFO("Wrist in World: {}, {}, {}, {}, {}, {}", x(), y(), z(), rx(), ry(), rz());
   }
 
   WHILE_RUNNING { sleep_ms(100); }

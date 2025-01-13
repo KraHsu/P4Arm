@@ -40,18 +40,17 @@
 ```yaml
 # Payload
 Actor: "Actor"          # 执行动作的主体，可选 "Actor" 或 "Wrist"
-
 Target:                 # 目标点配置
     Frame: "World"      # 目标点参考的坐标系，可选 "World" 或 "Base"
     Position:           # 目标点的位置
         - 0.0           # x 坐标
         - 0.0           # y 坐标
         - 0.0           # z 坐标
-    Eular:              # 目标点的欧拉角
+    Euler:              # 目标点的欧拉角
         - 0.0           # rx 角度
         - 0.0           # ry 角度
         - 0.0           # rz 角度
-    Speed: 0            # 1-100则使用给定速度，否则表示使用配置速度
+Speed: 0                # 1-100则使用给定速度，0表示使用配置速度
 # Succ 300
                         # Nothing
 # Fail 400
@@ -60,7 +59,7 @@ Msg: ""                 # 错误原因
 注意：
 - `Actor`：表示机械手或夹爪抓去点，具体含义由配置文件`Actor`决定
 - `Position`：单位为`米/m`
-- `Eular`：角度单位使用弧度制，参数顺序为`rx->ry->rz`，外旋
+- `Euler`：角度单位使用弧度制，参数顺序为`rx->ry->rz`，外旋
 
 ----
 
@@ -74,7 +73,7 @@ Position:           # 目标点的位置
     - 0.0           # x 坐标
     - 0.0           # y 坐标
     - 0.0           # z 坐标
-Eular:              # 目标点的欧拉角
+Euler:              # 目标点的欧拉角
     - 0.0           # rx 角度
     - 0.0           # ry 角度
     - 0.0           # rz 角度
@@ -84,7 +83,7 @@ Msg: ""             # 错误原因
 注意：
 - `Actor`：表示机械手或夹爪抓去点，具体含义由配置文件`Actor`决定
 - `Position`：单位为`米/m`
-- `Eular`：角度单位使用弧度制，参数顺序为`rx->ry->rz`，外旋
+- `Euler`：角度单位使用弧度制，参数顺序为`rx->ry->rz`，外旋
 
 ----
 
@@ -119,7 +118,7 @@ Actor:
             - 0     # x
             - 0     # y
             - 0     # z
-        Eular:      # 弧度 rx->ry->rz 外旋
+        Euler:      # 弧度 rx->ry->rz 外旋
             - 0     # rx
             - 0     # ry
             - 0     # rz   

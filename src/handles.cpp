@@ -1,6 +1,9 @@
+#include "Hsu/arm.h"
 #include <Hsu/hand.h>
 #include <Hsu/matrix_ops.h>
+#include <nlohmann/json-schema.hpp>
 #include <spdlog/spdlog.h>
+#include <array>
 #include <exception>
 #include <handles.h>
 
@@ -8,123 +11,88 @@ using json = nlohmann::json;
 using namespace units::literals;
 
 // ---- LOGGER ----
-#define DEBUG(...) spdlog::debug(__VA_ARGS__)
-#define INFO(...) spdlog::info(__VA_ARGS__)
-#define WARN(...) spdlog::warn(__VA_ARGS__)
-#define ERROR(...) spdlog::error(__VA_ARGS__)
+#define DEBUG(...) \
+  spdlog::log(spdlog::source_loc{__FILE__, __LINE__, SPDLOG_FUNCTION}, spdlog::level::debug, __VA_ARGS__)
+#define INFO(...) spdlog::log(spdlog::source_loc{__FILE__, __LINE__, SPDLOG_FUNCTION}, spdlog::level::info, __VA_ARGS__)
+#define WARN(...) spdlog::log(spdlog::source_loc{__FILE__, __LINE__, SPDLOG_FUNCTION}, spdlog::level::warn, __VA_ARGS__)
+#define ERROR(...) spdlog::log(spdlog::source_loc{__FILE__, __LINE__, SPDLOG_FUNCTION}, spdlog::level::err, __VA_ARGS__)
 
-Hsu::TCPConnection::Response handle_move(std::shared_ptr<Hsu::Arm> left, std::shared_ptr<Hsu::Arm> right, int code,
-                                         json const& payload) {
-  std::shared_ptr<Hsu::Arm> arm;
-
+Hsu::TCPConnection::Response handle_arm(std::shared_ptr<Hsu::Arm> arm, int code, json const& payload) {
   Hsu::TCPConnection::Response res;
-  res.code = 0;
+  res.code = 300;
 
-  if (code >= 50 and code <= 55) {
-    arm = right;
-    code -= 50;
-  } else if (code >= 60 and code <= 65) {
-    arm = left;
-    code -= 60;
-  } else {
-    res.code = 100;
-    res.payload = {{"message", "Error code."}};
-    return res;
-  }
+  static json schema101 =
+      R"({"type":"object","properties":{"Actor":{"type":"string","enum":["Actor","Wrist"]},"Target":{"type":"object",")"
+      R"(properties":{"Frame":{"type":"string","enum":["World","Base"]},"Position":{"type":"array","items":{"type":"nu)"
+      R"(mber"},"minItems":3,"maxItems":3},"Euler":{"type":"array","items":{"type":"number"},"minItems":3,"maxItems":3)"
+      R"(}},"required":["Frame","Position","Euler"]},"Speed":{"type":"integer","minimum":0,"maximum":100}},"required":)"
+      R"(["Actor","Target","Speed"]})"_json;
+  static nlohmann::json_schema::json_validator validator101;
+  static json schema102 =
+      R"({"type":"object","properties":{"Actor":{"type":"string","enum":["Actor","Wrist"]},"Frame":{"type":"string","e)"
+      R"(num":["World","Base"]}},"required":["Actor","Frame"]})"_json;
+  static nlohmann::json_schema::json_validator validator102;
+
+  static bool _ = [&]() {
+    validator101.set_root_schema(schema101);
+    validator102.set_root_schema(schema102);
+    return true;
+  }();
 
   try {
     switch (code) {
-      case 0: {
-        if (!payload.contains("coor")) {
-          res.code = 100;
-          res.payload = {{"message", "Ivalid key."}};
-          break;
-        }
-        json coor = payload["coor"];
-        if (coor.is_array() && coor.size() == 6) {
-          if (!limited_move_jp(arm, rm_position_t{coor[0], coor[1], coor[2]}, rm_euler_t{coor[3], coor[4], coor[5]})) {
-            res.code = 100;
-            res.payload = {{"message", "Out of limit."}};
-          }
-          break;
-        }
-        res.code = 100;
-        res.payload = {{"message", "Ivalid value of coor."}};
+      case 101: {
+        validator101.validate(payload);
+
+        auto const& [x, y, z] = payload["Target"]["Position"].get<std::array<double, 3>>();
+        auto const& [rx, ry, rz] = payload["Target"]["Euler"].get<std::array<double, 3>>();
+
+        Hsu::Arm::Posture posture(x * 1_m, y * 1_m, z * 1_m, rx * 1_rad, ry * 1_rad, rz * 1_rad);
+
+        arm->move(posture, payload["Speed"].get<int>(), payload["Actor"].get<std::string>(),
+                  payload["Target"]["Frame"].get<std::string>());
         break;
       }
-      case 1: {
-        auto pose = json::array();
-        auto state = arm->get_state();
-
-        pose.push_back(state.pose.position.x);
-        pose.push_back(state.pose.position.y);
-        pose.push_back(state.pose.position.z);
-        pose.push_back(state.pose.euler.rx);
-        pose.push_back(state.pose.euler.ry);
-        pose.push_back(state.pose.euler.rz);
-
-        res.payload = {{"pose", pose}};
+      case 102: {
+        validator102.validate(payload);
+        auto&& posture = arm->read_posture(payload["Actor"], payload["Frame"]);
+        auto const& [x, y, z] = posture.Position;
+        auto const& [rx, ry, rz] = posture.Euler;
+        res.payload = json::parse(
+            fmt::format(R"({{"Position":[{},{},{}],"Euler":[{},{},{}]}})", x(), y(), z(), rx(), ry(), rz()));
         break;
       }
-      case 2: {
-        auto pose = json::array();
-        auto state = arm->get_state();
-
-        for (auto const& theta : state.joint) {
-          pose.push_back(theta);
-        }
-
-        res.payload = {{"pose", pose}};
-        break;
-      }
-      case 3:
-      case 4:
-      case 5: {
-        res.code = 100;
-        res.payload = {{"message", "Unsupport now!"}};
+      default: {
+        res.code = 400;
+        res.payload = {{"message", "Error code."}};
         break;
       }
     }
   } catch (std::exception& e) {
-    res.code = 100;
+    res.code = 400;
     res.payload = {{"message", e.what()}};
-    spdlog::error(e.what());
+    ERROR(e.what());
   }
 
   return res;
 }
 
-Hsu::TCPConnection::Response handle_hand(std::shared_ptr<Hsu::Hand> left, std::shared_ptr<Hsu::Hand> right, int code,
-                                         json const& payload) {
-  std::shared_ptr<Hsu::Hand> hand;
-
+Hsu::TCPConnection::Response handle_hand(std::shared_ptr<Hsu::Hand> hand, int code, json const& payload) {
   Hsu::TCPConnection::Response res;
-  res.code = 0;
-
-  if (code >= 50 and code <= 55) {
-    hand = right;
-    code -= 50;
-  } else if (code >= 60 and code <= 65) {
-    hand = left;
-    code -= 60;
-  } else {
-    res.code = 100;
-    res.payload = {{"message", "Error code."}};
-    return res;
-  }
+  res.code = 300;
 
   if (!hand) {
-    res.code = 100;
+    res.code = 400;
     res.payload = {{"message", "Null hand."}};
     return res;
   }
 
   try {
     switch (code) {
-      case 0: {
+      case 101: {
         if (!payload.contains("little") and !payload.contains("ring") and !payload.contains("middle") and
             !payload.contains("index") and !payload.contains("thumb") and !payload.contains("thumb_r")) {
-          res.code = 100;
+          res.code = 400;
           res.payload = {{"message", "Ivalid key."}};
           break;
         }
@@ -141,18 +109,23 @@ Hsu::TCPConnection::Response handle_hand(std::shared_ptr<Hsu::Hand> left, std::s
 
         break;
       }
-      case 1: {
+      case 102: {
         if (!payload.contains("config")) {
-          res.code = 100;
+          res.code = 400;
           res.payload = {{"message", "Ivalid key."}};
           break;
         }
         res.payload = read_tactile_data(hand, payload["config"]);
         break;
       }
+      default: {
+        res.code = 400;
+        res.payload = {{"message", "Error code."}};
+        break;
+      }
     }
   } catch (std::exception& e) {
-    res.code = 100;
+    res.code = 400;
     res.payload = {{"message", e.what()}};
     spdlog::error(e.what());
   }
@@ -167,7 +140,7 @@ bool limited_move_jp(std::shared_ptr<Hsu::Arm> arm, rm_position_t position, rm_e
     return false;
   }
 
-  arm->move_jp(position, posture, 10);
+  // arm->move_jp(position, posture, 10);
 
   return true;
 }
