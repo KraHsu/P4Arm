@@ -15,3 +15,6 @@ CMakeUserPresets.json
 .cache
 build/*
 log/*
+
+Verify
+config.yaml
