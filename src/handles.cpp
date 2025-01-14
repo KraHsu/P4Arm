@@ -1,6 +1,7 @@
 #include "Hsu/arm.h"
 #include <Hsu/hand.h>
 #include <Hsu/matrix_ops.h>
+#include <fmt/ostream.h>
 #include <nlohmann/json-schema.hpp>
 #include <spdlog/spdlog.h>
 #include <array>
@@ -60,6 +61,37 @@ Hsu::TCPConnection::Response handle_arm(std::shared_ptr<Hsu::Arm> arm, int code,
         auto const& [rx, ry, rz] = posture.Euler;
         res.payload = json::parse(
             fmt::format(R"({{"Position":[{},{},{}],"Euler":[{},{},{}]}})", x(), y(), z(), rx(), ry(), rz()));
+        break;
+      }
+      case 103: {
+        auto&& joint_angles = arm->read_joint_angle();
+
+        res.payload = json::parse(fmt::format(R"({{"Joints":[{},{},{},{},{},{},{}]}})", joint_angles[0](),
+                                              joint_angles[1](), joint_angles[2](), joint_angles[3](),
+                                              joint_angles[4](), joint_angles[5](), joint_angles[6]()));
+        break;
+      }
+      case 104: {
+        auto&& joint_angles = arm->stop();
+
+        res.payload = json::parse("{}");
+        break;
+      }
+      case 105: {
+        validator102.validate(payload);
+        auto&& posture = arm->read_target(payload["Actor"], payload["Frame"]);
+        auto const& [x, y, z] = posture.Position;
+        auto const& [rx, ry, rz] = posture.Euler;
+        res.payload = json::parse(
+            fmt::format(R"({{"Position":[{},{},{}],"Euler":[{},{},{}]}})", x(), y(), z(), rx(), ry(), rz()));
+        break;
+      }
+      case 106: {
+        if (payload.contains("mode")) {
+          arm->set_mode(payload["mode"].get<int>());
+        }
+
+        res.payload = json::parse("{}");
         break;
       }
       default: {

@@ -114,7 +114,7 @@ Arm::Frames& Arm::Frames::set_joint_angle(uint32_t i, units::angle::radian_t rad
 }  // namespace Hsu
 
 namespace Hsu {
-Arm::Arm(std::string const& ip, int const& port) : frame_() {
+Arm::Arm(std::string const& ip, int const& port) : frame_(), target_(0_m, 0_m, 0_m, 0_rad, 0_rad, 0_rad) {
   auto& service = detail::service_ins();
   service.rm_set_log_call_back(detail::api_log, 3);
   handle_ = service.rm_create_robot_arm(ip.c_str(), port);
@@ -344,6 +344,11 @@ Arm::Posture Arm::read_posture(std::string const& actor, std::string const& fram
   return {{x * 1_m, y * 1_m, z * 1_m}, {rx * 1_rad, ry * 1_rad, rz * 1_rad}};
 }
 
+Arm::Posture Arm::read_target(std::string const& actor, std::string const& frame) {
+  std::lock_guard<std::mutex> lock(mutex_);
+  return target_;
+}
+
 std::array<Types::HomogeneousM, 8> Arm::get_frames_data() {
   read_joint_angle();
 
@@ -362,6 +367,7 @@ void Arm::set_actor_offset(Types::HomogeneousM const& offset) {
 }
 
 void Arm::move(Arm::Posture posture, int v, std::string const& actor, std::string const& frame) {
+  target_ = posture;
   rm_pose_t pose;
 
   std::shared_ptr<Hsu::Frame> Actor, Frame;
