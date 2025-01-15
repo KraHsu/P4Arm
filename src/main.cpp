@@ -390,9 +390,9 @@ int main() {
 
   {
     Hsu::Arm::Posture pose(0.35_m, 0_m, 0.2_m, 0_deg, 0_deg, 0_deg);
-    left_arm->move(pose, 2, "Wrist", "Base");
+    left_arm->move(pose, 6, "Wrist", "Base");
 
-    right_arm->move(pose, 2, "Wrist", "Base");
+    right_arm->move(pose, 6, "Wrist", "Base");
   }
 
   WHILE_RUNNING { sleep_ms(100); }

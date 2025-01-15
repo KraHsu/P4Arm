@@ -87,7 +87,7 @@ class Arm : public std::enable_shared_from_this<Arm> {
 
   Frames const& read_frames() { return frame_; }
 
- public:
+ private:
   Frames frame_;
 
   std::shared_ptr<Frame> base_;
@@ -157,6 +157,8 @@ class Arm : public std::enable_shared_from_this<Arm> {
 
   Posture read_posture(std::string const& actor, std::string const& frame);
 
+  Posture read_target(std::string const& actor, std::string const& frame);
+
   std::array<units::angle::radian_t, 7> read_joint_angle();
 
   std::array<Types::HomogeneousM, 8> get_frames_data();
@@ -172,6 +174,8 @@ class Arm : public std::enable_shared_from_this<Arm> {
   std::mutex mutex_;
   bool paused_{false};
   bool stop_{false};
+
+  Posture target_;
 
   // ----
 
