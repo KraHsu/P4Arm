@@ -152,7 +152,7 @@ add_custom_target(copy_config ALL
     COMMENT "已复制配置文件"
 )
 
-add_dependencies(${CMAKE_PROJECT_NAME} copy_assets)
+add_dependencies(${CMAKE_PROJECT_NAME} copy_config)
 
 # 启用详细输出
 set(CMAKE_VERBOSE_MAKEFILE ON)
