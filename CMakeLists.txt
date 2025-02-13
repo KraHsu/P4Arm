@@ -33,7 +33,7 @@ endif()
 # 包含 Boost 的头文件路径
 target_include_directories(${CMAKE_PROJECT_NAME} PUBLIC ${Boost_INCLUDE_DIRS} ${EIGEN3_INCLUDE_DIR})
 
-# 链接 Boost 库
+# 链接 Eigen 库
 target_link_libraries(${CMAKE_PROJECT_NAME} ${Boost_LIBRARIES} Eigen3::Eigen)
 
 # 添加 Boost 系统库的依赖
@@ -152,7 +152,7 @@ add_custom_target(copy_config ALL
     COMMENT "已复制配置文件"
 )
 
-add_dependencies(${CMAKE_PROJECT_NAME} copy_assets)
+add_dependencies(${CMAKE_PROJECT_NAME} copy_config)
 
 # 启用详细输出
 set(CMAKE_VERBOSE_MAKEFILE ON)
